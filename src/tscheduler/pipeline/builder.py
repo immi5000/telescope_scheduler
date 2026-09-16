@@ -146,6 +146,10 @@ def build_scheduler_input(
         weight=np.array([t.weight for t in spec.targets], dtype=float),
         subs_per_slot=subs,
         t_sub_s=np.full(n_t, spec.t_sub_s),
+        snr_goal=np.array(
+            [t.snr_goal if t.snr_goal is not None else spec.snr_goal for t in spec.targets],
+            dtype=float,
+        ),
         switch_slots=grid.minutes_to_slots(spec.mount.switch_minutes),
         switch_remainder=grid.fractional_remainder(spec.mount.switch_minutes),
         min_block_slots=max(int(spec.mount.min_block_minutes // grid.slot_minutes), 1),

@@ -29,6 +29,7 @@ multiple of the slot length.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -61,6 +62,10 @@ class SchedulerInput:
     subs_per_slot: NDArray[np.int64]
     """(T, S) whole sub-exposures obtainable in a slot, after readout overhead."""
     t_sub_s: NDArray[np.float64]
+    snr_goal: NDArray[np.float64] | None = None
+    """(T,) the SNR each target is aiming for. Carried only so the extractor can
+    turn accumulated reference-seconds back into an SNR for the instruction
+    card; the model itself works entirely in required_ref_seconds."""
     switch_slots: int = 1
     switch_remainder: float = 0.0
     min_block_slots: int = 4
@@ -370,6 +375,21 @@ def build_and_solve(
     )
 
 
+def block_expected_snr(inp: SchedulerInput, t: int, data_slots: Sequence[int]) -> float:
+    """SNR delivered by one block, on its own.
+
+    Exact rather than approximate: SNR^2 is additive across sub-exposures, so a
+    block that accumulates ``acc`` reference-seconds against a requirement of
+    ``E_t = goal^2 / rho_ref`` delivers ``goal * sqrt(acc / E_t)``. Summing
+    several blocks' SNRs therefore has to happen in quadrature, not linearly.
+    """
+    need = float(inp.required_ref_seconds[t])
+    if need <= 0 or inp.snr_goal is None:
+        return 0.0
+    acc = float(sum(inp.eta[t, k] * inp.grid.slot_seconds for k in data_slots))
+    return float(inp.snr_goal[t]) * float(np.sqrt(max(acc, 0.0) / need))
+
+
 def _extract(
     inp: SchedulerInput,
     as_of: AsOf,
@@ -412,9 +432,7 @@ def _extract(
         t = inp.target_ids.index(tid)
         data_slots = [k for k in range(s, end) if slot_kind[k] is SlotKind.OBSERVE]
         n_subs = int(sum(int(inp.subs_per_slot[t, k]) for k in data_slots))
-        acc = float(sum(inp.eta[t, k] * inp.grid.slot_seconds for k in data_slots))
-        need = float(inp.required_ref_seconds[t])
-        snr = 0.0 if need <= 0 else float(np.sqrt(max(acc, 0.0) / need)) * 0.0
+        snr = block_expected_snr(inp, t, data_slots)
         blocks.append(
             Block(
                 target_id=tid,

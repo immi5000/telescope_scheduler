@@ -190,3 +190,17 @@ class Provider[Q, T](ABC):
     @abstractmethod
     def coverage_key(self, query: Q) -> str:
         """Stable cache key for the query (NOT including as_of -- see cache.py)."""
+
+    def publication_times(self, query: Q, horizon: AsOf) -> tuple[datetime, ...]:
+        """Distinct instants at or before ``horizon`` at which this source published.
+
+        These are the replay fold's decision points: between two consecutive
+        publications nothing visible changes, so the plan is identical by
+        construction and the slider can index rather than re-solve.
+
+        Asking with ``horizon = night_end`` is not a lookahead -- it enumerates
+        *when* information will arrive, and every plan is still built at its own
+        as_of, which re-applies the gate. The records themselves go no further
+        than this method.
+        """
+        return tuple(sorted({r.published_at for r in self.fetch(query, horizon).records}))
