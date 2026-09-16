@@ -242,3 +242,70 @@ def test_blocks_and_assignments_agree() -> None:
     for blk in plan.blocks:
         for s in range(blk.slot_start, blk.slot_end):
             assert plan.assignments[s].target_id == blk.target_id
+
+
+# --- regression guards for bugs found by running the solver ------------------
+# Each of these is written to FAIL against the original buggy behaviour; a guard
+# that passes on the bug it names is worse than no guard, because it reads as
+# coverage. tests/unit/test_regressions_have_teeth.py proves they discriminate.
+
+
+def test_bright_target_needing_almost_no_integration_is_still_scheduled() -> None:
+    """Regression: the over-exposure cap contradicted the operational constraints.
+
+    A bright target can need essentially no integration (M31 through an 8" scope
+    reaches SNR 20 in ~20 s) while the minimum block length and the >= 9 frame
+    rule still force it to occupy L slots. A naive cap of 1.25 * E_t is then
+    unsatisfiable, so u[t] was forced to 0 and the target vanished.
+
+    The failure mode was the worst kind: the solver returned status OPTIMAL with
+    an empty plan and every target "dropped". It looked like success.
+    """
+    inp = make_input(n_targets=2, n_slots=40, eta=1.0, need_ref_s=0.0)
+    plan = build_and_solve(inp, AS_OF, FAST)
+    assert plan.included, "a trivially-completable target must not be dropped"
+    assert plan.blocks, "an OPTIMAL but empty plan is the failure this guards"
+    for blk in plan.blocks:
+        assert blk.n_slots - blk.switch_slots >= inp.min_block_slots
+
+
+def test_cheap_targets_beat_one_expensive_target_when_capacity_forces_a_choice() -> None:
+    """Regression: the completion bonus was scaled by E_t, which is backwards.
+
+    Scaling by cost makes an expensive target worth MORE, so the solver
+    completes one long target instead of several short ones. The scenario below
+    is sized so only one option fits: two cheap targets (12 slots) or one
+    expensive one (16 slots), out of 20.
+
+    Under the old objective the expensive target scored 15 units against 10 for
+    the pair, so it won. Under a flat per-target bonus the pair wins 2:1.
+    """
+    inp = make_input(
+        n_targets=3,
+        n_slots=20,
+        eta=1.0,
+        need_ref_s=np.array([1500.0, 1500.0, 4500.0]),
+        min_block_slots=5,
+    )
+    plan = build_and_solve(inp, AS_OF, FAST)
+    assert len(plan.included) >= 2, f"expected >=2 targets, got {sorted(plan.included)}"
+    assert "t2" not in plan.included or len(plan.included) > 1
+
+
+def test_model_contains_no_big_m_constants() -> None:
+    """Regression: the model claimed "no big-M" and then used (1 - u) * 1e9.
+
+    CP-SAT was chosen precisely because every structural constraint is
+    expressible with reified implications instead of big-M. A big-M destroys the
+    LP relaxation and is exactly the kind of thing that creeps back in during a
+    late fix, so this is a lint-style guard on the source rather than behaviour.
+    """
+    import re
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2] / "src" / "tscheduler" / "scheduling" / "cpsat.py"
+    code = "\n".join(
+        line for line in src.read_text().splitlines() if not line.strip().startswith("#")
+    )
+    hits = re.findall(r"(?<![\w.])(?:10\s*\*\*\s*[6-9]|[1-9]\s*e\s*[6-9]|\d{7,})(?![\w.])", code)
+    assert not hits, f"possible big-M constant(s) reintroduced into the CP-SAT model: {hits}"

@@ -83,27 +83,54 @@ def test_sun_is_below_horizon_through_a_september_night(geo) -> None:
     assert np.sum(geo.sun_altitude_deg < -18.0) > 40, "expect real astronomical darkness"
 
 
-def test_moon_separation_is_topocentric_and_sane(geo) -> None:
-    """Regression guard for a real bug: comparing an ICRS target against a GCRS
-    Moon gave separations wrong by ~70 deg, which would have placed scattered
-    moonlight in entirely the wrong part of the sky.
+def test_moon_separation_matches_an_independent_computation(geo) -> None:
+    """Regression guard for a real bug, with teeth.
 
-    M51 (RA 202) and M31 (RA 011) are ~150 deg apart, so their separations from
-    the same Moon cannot both be small.
+    Separations were computed between an ICRS target and a GCRS Moon. That gave
+    M51 128.85 deg where the truth is 57.80, and M31 48.99 where the truth is
+    148.48 -- errors of ~70 deg, which would place scattered moonlight in
+    entirely the wrong part of the sky and corrupt every exposure calculation.
+
+    An earlier version of this test only checked that the two separations
+    DIFFERED by more than 50 deg and obeyed the spherical triangle inequality.
+    Both of those hold for the buggy values (|128.85 - 48.99| = 79.86, and the
+    true M51-M31 distance is 90.92), so it passed on the bug and guarded
+    nothing. This version compares against an independent computation instead,
+    which is the only formulation that actually discriminates.
     """
-    assert np.all((geo.moon_separation_deg >= 0.0) & (geo.moon_separation_deg <= 180.0))
-    sep_m51 = geo.moon_separation_deg[1].mean()
-    sep_m31 = geo.moon_separation_deg[2].mean()
-    assert abs(sep_m51 - sep_m31) > 50.0
-    # Cross-check against the true angular distance between the two targets.
     from astropy import units as u
-    from astropy.coordinates import SkyCoord
+    from astropy.coordinates import EarthLocation, SkyCoord, get_body
+    from astropy.time import Time
 
-    m51 = SkyCoord(M51.ra_deg * u.deg, M51.dec_deg * u.deg)
-    m31 = SkyCoord(M31.ra_deg * u.deg, M31.dec_deg * u.deg)
-    m51_m31 = m51.separation(m31).deg
-    # Triangle inequality on the sphere must hold for every slot.
-    assert np.all(np.abs(geo.moon_separation_deg[1] - geo.moon_separation_deg[2]) <= m51_m31 + 1e-6)
+    loc = EarthLocation(
+        lat=SITE.latitude_deg * u.deg,
+        lon=SITE.longitude_deg * u.deg,
+        height=SITE.elevation_m * u.m,
+    )
+    for idx, tgt in ((1, M51), (2, M31)):
+        for slot in (0, geo.n_slots // 2, geo.n_slots - 1):
+            t = Time(geo.grid.slot_mid(slot))
+            # TOPOCENTRIC moon, matching what the code computes and what the
+            # observer actually sees. Using the geocentric position here would
+            # disagree by ~0.6 deg of lunar parallax -- real physics, not a bug,
+            # but enough to make a tight tolerance fail for the wrong reason.
+            moon = get_body("moon", t, loc)
+            # Plain spherical separation on RA/Dec, an independent path from the
+            # AltAz-frame computation under test. Agrees to ~0.01 deg; the
+            # ICRS-vs-GCRS bug disagreed by ~70 deg.
+            independent = (
+                SkyCoord(tgt.ra_deg * u.deg, tgt.dec_deg * u.deg)
+                .separation(SkyCoord(moon.ra, moon.dec))
+                .deg
+            )
+            got = geo.moon_separation_deg[idx, slot]
+            assert got == pytest.approx(independent, abs=0.05), (
+                f"{tgt.name} slot {slot}: got {got:.3f}, independent {independent:.3f}"
+            )
+
+
+def test_moon_separation_stays_within_range(geo) -> None:
+    assert np.all((geo.moon_separation_deg >= 0.0) & (geo.moon_separation_deg <= 180.0))
 
 
 def test_phase_angle_and_illumination_are_consistent(geo) -> None:
