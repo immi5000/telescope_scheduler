@@ -25,7 +25,7 @@ Backend core is built and tested. Milestones 0–6 of 10 are complete.
 | 6 | No-lookahead property test | done |
 | 7 | Real providers — Open-Meteo + CelesTrak done; Space-Track, ALeRCE next | partial |
 | 8 | FastAPI + SSE — server done; SQLite persistence next | partial |
-| 9 | React frontend | |
+| 9 | React frontend | done |
 | 10 | Three-arm evaluation | done |
 
 ## Run the server
@@ -66,6 +66,38 @@ required.
 
 Sessions live in memory. Restart the process and they are gone; the fold is a
 pure function of the request, so any session can be rebuilt from it.
+
+## Run the UI
+
+Two processes. The Vite dev server proxies `/api`, so the browser sees one
+origin and the SSE stream is same-origin.
+
+```bash
+# terminal 1
+uv run python -m tscheduler.api
+
+# terminal 2
+cd frontend && npm install && npm run dev     # http://localhost:5173
+```
+
+Pick a night, press **plan the night**, then drag the timeline. The cursor is
+both the clock and the as-of: everything left of it is hatched, because those
+slots are history and no re-plan may touch them. The panel on the right names
+the forecast run that arrived, what moved because of it, and how many past slots
+were rewritten — which is always zero, shown rather than merely asserted in a
+test.
+
+Night mode is on by default. Dark adaptation takes 20–30 minutes to build and
+seconds of blue light to destroy.
+
+The TypeScript types are generated from the backend's own OpenAPI document:
+
+```bash
+cd frontend && npm run gen:types
+```
+
+`tests/api/test_openapi_contract.py` fails if the committed `openapi.json` and
+the live app ever disagree.
 
 ## Try it from the command line
 
