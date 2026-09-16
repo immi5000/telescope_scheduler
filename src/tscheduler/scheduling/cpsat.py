@@ -69,6 +69,15 @@ class SchedulerInput:
     cosmic rays. This is good practice independent of satellites, which is what
     makes the design robust to a wrong streak-rate model."""
     max_blocks_per_target: int = 3
+    completion_margin: float = 0.15
+    """Accumulate (1 + margin) x E_t before declaring a target done.
+
+    Targeting E_t exactly leaves zero slack, so any forecast error flips
+    completion to failure. Measured on six real nights: the optimizer repeatedly
+    landed targets at 0.98x requirement under realized conditions and got no
+    credit, while the naive baseline's greedy blocks overshot by accident and
+    survived. A real observer does not stop at exactly SNR 20 either.
+    """
     overexposure_allowance: float = 0.25
     switch_penalty: float = 2.0
     change_penalty: float = 0.5
@@ -210,7 +219,7 @@ def build_and_solve(
         if not gained:
             m.add(u[t] == 0)
             continue
-        need = round(SCALE * float(inp.required_ref_seconds[t]))
+        need = round(SCALE * float(inp.required_ref_seconds[t]) * (1.0 + inp.completion_margin))
         m.add(sum(gained) >= need * u[t])
 
         # Over-exposure cap: without it the optimizer can dump the whole night on
