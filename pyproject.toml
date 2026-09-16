@@ -60,6 +60,11 @@ files = ["src/tscheduler"]
 module = ["tscheduler.physics.*", "tscheduler.pipeline.*"]
 disallow_any_explicit = false
 
+# These ship no py.typed marker. We type our own boundaries instead.
+[[tool.mypy.overrides]]
+module = ["astropy.*", "ortools.*", "sgp4.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 addopts = "-q --strict-markers"
 testpaths = ["tests"]
