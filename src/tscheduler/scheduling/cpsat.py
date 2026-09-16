@@ -227,6 +227,23 @@ def build_and_solve(
         best_eta = float(np.max(inp.eta[t])) if inp.eta[t].size else 0.0
         min_block_delivery = round(SCALE * slot_s * best_eta * (L + W))
         cap = max(round(need * (1.0 + inp.overexposure_allowance)), min_block_delivery)
+
+        # History cannot violate a cap. Slots already locked to this target
+        # collected real photons, and no re-plan can un-collect them -- so the
+        # cap has to be raised by whatever the past already contributed, or a
+        # mid-night re-plan on a nearly-finished target makes the whole model
+        # INFEASIBLE. That is not hypothetical: replaying a real night hit it at
+        # the third decision point and returned an empty plan.
+        locked_gain = round(
+            SCALE
+            * slot_s
+            * sum(
+                float(inp.eta[t, sl])
+                for sl, tid in inp.locked.items()
+                if tid == inp.target_ids[t] and sl < n_s
+            )
+        )
+        cap += locked_gain
         # only_enforce_if, NOT a big-M. An earlier version wrote
         #     sum(gained) <= cap + (1 - u[t]) * 1e9
         # which is the exact thing this model was chosen to avoid: the 1e9

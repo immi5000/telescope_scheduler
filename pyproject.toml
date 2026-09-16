@@ -67,6 +67,6 @@ module = ["astropy.*", "ortools.*", "sgp4.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-addopts = "-q --strict-markers"
+addopts = "-q --strict-markers -m 'not network'"
 testpaths = ["tests"]
 markers = ["slow: long-running", "network: requires network (deselected by default)"]

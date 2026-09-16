@@ -309,3 +309,33 @@ def test_model_contains_no_big_m_constants() -> None:
     )
     hits = re.findall(r"(?<![\w.])(?:10\s*\*\*\s*[6-9]|[1-9]\s*e\s*[6-9]|\d{7,})(?![\w.])", code)
     assert not hits, f"possible big-M constant(s) reintroduced into the CP-SAT model: {hits}"
+
+
+def test_locked_history_may_exceed_the_over_exposure_cap() -> None:
+    """Regression: a mid-night re-plan on a nearly-finished target went INFEASIBLE.
+
+    Slots already locked to a target collected real photons and no re-plan can
+    un-collect them, so the cap must be raised by whatever history already
+    contributed. Otherwise the accumulation constraint and the cap contradict
+    each other and the solver returns nothing -- which the plan explicitly calls
+    a bug, since u[t] is supposed to make the model always feasible.
+
+    Found by replaying a real night: the third decision point produced an empty
+    plan once past slots were correctly locked.
+    """
+    n_slots = 40
+    # Lock a long run onto t0 -- far more than its requirement plus allowance.
+    locked = dict.fromkeys(range(24), "t0")
+    inp = make_input(
+        n_targets=2,
+        n_slots=n_slots,
+        eta=1.0,
+        need_ref_s=1500.0,  # 5 slots' worth; history gives 24
+        locked=locked,
+        first_free_slot=24,
+    )
+    plan = build_and_solve(inp, AS_OF, FAST)
+    assert plan.status in ("OPTIMAL", "FEASIBLE"), f"model went {plan.status}"
+    assert plan.assignments, "empty assignment tuple means the solve failed"
+    for slot, tid in locked.items():
+        assert plan.assignments[slot].target_id == tid
