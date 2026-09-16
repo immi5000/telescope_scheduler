@@ -173,3 +173,57 @@ def test_empty_tle_set_is_an_error_not_a_silent_zero(tles) -> None:
     g = TimeGrid.from_window(BASE, BASE + timedelta(minutes=10))
     with pytest.raises(ValueError, match="no TLEs"):
         build_density_map([], LAT, LON, ELEV, g.mids())
+
+
+# --- integration with the pipeline -------------------------------------------
+def test_satellite_risk_lowers_preference_but_never_efficiency(tles) -> None:
+    """The load-bearing separation.
+
+    A streak is mitigated in post-processing by sigma-clipping, so it is a COST
+    to be weighed against alternatives -- not signal that was never collected.
+    It therefore belongs in preference (soft policy) and must never touch
+    efficiency (calibrated physics that drives the completion constraint).
+
+    If it leaked into efficiency, every target's exposure requirement would
+    silently change whenever a satellite happened to pass, which is exactly the
+    failure mode the efficiency/preference split exists to prevent.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from tscheduler.core.clock import AsOf
+    from tscheduler.domain.equipment import Camera, Mount, Optics
+    from tscheduler.domain.site import Site
+    from tscheduler.domain.targets import Target
+    from tscheduler.physics.satellites import DensityMapRisk
+    from tscheduler.pipeline.builder import (
+        SessionSpec,
+        build_geometry,
+        build_scheduler_input,
+    )
+    from tscheduler.providers.weather.fixture import FixtureForecast
+
+    start = datetime(2026, 9, 17, 23, 0, tzinfo=UTC)
+    grid = TimeGrid.from_window(start, start + timedelta(hours=4))
+    spec = SessionSpec(
+        site=Site(latitude_deg=LAT, longitude_deg=LON, elevation_m=ELEV),
+        grid=grid,
+        optics=Optics(aperture_mm=203.0, focal_length_mm=2032.0),
+        camera=Camera(pixel_size_um=3.76, sensor_width_px=6248, sensor_height_px=4176),
+        mount=Mount(),
+        targets=(Target("m31", "M31", 10.6847, 41.2690, 17.0),),
+        snr_goal=40.0,
+    )
+    forecast = FixtureForecast.from_runs(
+        [(start - timedelta(hours=6), [(start + timedelta(hours=h), 0.1) for h in range(6)])]
+    )
+    geo = build_geometry(spec)
+    dm = build_density_map(tles, LAT, LON, ELEV, grid.mids())
+
+    quiet, _ = build_scheduler_input(spec, geo, forecast, AsOf.at(start))
+    busy, _ = build_scheduler_input(
+        spec, geo, forecast, AsOf.at(start), satellite_risk=DensityMapRisk(dm)
+    )
+
+    assert np.array_equal(quiet.eta, busy.eta), "satellites must not change efficiency"
+    assert np.array_equal(quiet.required_ref_seconds, busy.required_ref_seconds)
+    assert np.all(busy.preference <= quiet.preference + 1e-12), "risk can only lower preference"

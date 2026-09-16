@@ -24,6 +24,7 @@ from tscheduler.domain.site import Site
 from tscheduler.domain.targets import Target
 from tscheduler.physics.geometry import NightGeometry, build_night_geometry
 from tscheduler.physics.quality import efficiency, preference
+from tscheduler.physics.satellites import NullSatelliteRisk, SatelliteRiskModel
 from tscheduler.physics.sky import sky_brightness
 from tscheduler.providers.base import EvidenceLedger
 from tscheduler.providers.weather.base import WeatherForecastProvider
@@ -42,6 +43,11 @@ class SessionSpec:
     snr_goal: float = 20.0
     t_sub_s: float = 90.0
 
+    @property
+    def fov_deg2(self) -> float:
+        w, h = self.camera.fov_deg(self.optics)
+        return w * h
+
 
 def build_geometry(spec: SessionSpec) -> NightGeometry:
     """The expensive, as_of-independent half. Cache this per session."""
@@ -57,6 +63,7 @@ def build_scheduler_input(
     previous_plan: dict[int, str | None] | None = None,
     locked: dict[int, str | None] | None = None,
     first_free_slot: int = 0,
+    satellite_risk: SatelliteRiskModel | None = None,
 ) -> tuple[SchedulerInput, EvidenceLedger]:
     """The as_of-dependent half. Pure numpy once the forecast is in hand."""
     grid = spec.grid
@@ -69,6 +76,14 @@ def build_scheduler_input(
         valid_to=grid.end,
     )
     cloud, seeing, ledger = weather.series(q, as_of, grid)
+
+    # Streak risk is expected illuminated trails per exposure. It enters ONLY
+    # the preference term, never efficiency: a streak is mitigated in
+    # post-processing by sigma-clipping, so it is a cost to be weighed rather
+    # than signal that was never collected.
+    risk = satellite_risk or NullSatelliteRisk()
+    slots = np.arange(n_s, dtype=np.int64)
+    fov = spec.fov_deg2
 
     eta = np.zeros((n_t, n_s))
     pref = np.zeros((n_t, n_s))
@@ -101,11 +116,15 @@ def build_scheduler_input(
             extinction_k=spec.site.extinction_k,
         )
         eta[i] = np.where(geo.visible[i], e, 0.0)
+        streak = risk.streak_rate_per_min(geo.altitude_deg[i], geo.azimuth_deg[i], slots, fov) * (
+            spec.t_sub_s / 60.0
+        )
         pref[i] = preference(
             altitude_deg=geo.altitude_deg[i],
             moon_separation_deg=geo.moon_separation_deg[i],
             cloud_fraction=cloud,
             seeing_fwhm_arcsec=seeing,
+            satellite_risk=streak,
             min_altitude_deg=spec.site.min_altitude_deg,
             min_moon_separation_deg=spec.site.min_moon_separation_deg,
         )["total"]
