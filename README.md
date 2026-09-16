@@ -23,7 +23,7 @@ Backend core is built and tested. Milestones 0–6 of 10 are complete.
 | 4 | Physics: sky brightness, moonlight, twilight, ETC | done |
 | 5 | CP-SAT scheduler | done |
 | 6 | No-lookahead property test | done |
-| 7 | Real providers (Open-Meteo, Space-Track, ALeRCE) | next |
+| 7 | Real providers — Open-Meteo done; Space-Track, ALeRCE next | partial |
 | 8 | Persistence + FastAPI + SSE | |
 | 9 | React frontend | |
 | 10 | Three-arm evaluation | |
@@ -32,11 +32,14 @@ Backend core is built and tested. Milestones 0–6 of 10 are complete.
 
 ```bash
 uv sync --group dev
-uv run python scripts/plan_night.py --bortle 5 --snr 60
-```
 
-Runs fully offline against a synthetic forecast. Swapping in a live provider is
-the only change needed — that is what the provider seam is for.
+# Plan a night offline against a synthetic forecast
+uv run python scripts/plan_night.py --bortle 5 --snr 60
+
+# Replay a REAL past night against real Open-Meteo model runs,
+# watching the plan adapt as each new forecast is published
+uv run python scripts/replay_night.py --date 2026-09-13
+```
 
 ```
   NIGHT PLAN  2026-09-13 01:00 - 09:00 UTC
@@ -52,6 +55,32 @@ the only change needed — that is what the provider seam is for.
     M57 Ring    fits in principle (85 of 137 reference-min available)
                 but was outranked for the slots it needed
 ```
+
+### Replay on real data
+
+```
+  161 records from 13 runs, published 09-10 13:36 .. 09-13 13:36 UTC
+
+  as_of 01:00  (session start)
+    knows 13 records, newest published 09-12 19:36 | forecast mean cloud 15%
+    plan: m27 -> m31 -> m27 -> n7000 -> m31 -> m33
+
+  as_of 01:36  (new 01:36 run arrived)
+    knows 13 records, newest published 09-13 01:36 | forecast mean cloud 3%
+    plan: m27 -> m57 -> m27 -> m57 -> m31 -> n7000 -> m31 -> m33
+    locked: slots 0-6 are history and cannot move
+    CHANGED: added m57; 39 slot(s) differ
+
+  as_of 07:36  (new 07:36 run arrived)
+    locked: slots 0-78 are history and cannot move
+    unchanged
+```
+
+Replay is a **fold**, not a sequence of point queries: slots already past are
+locked to whatever the accepted plan had them doing, because those photons were
+either collected or missed. The script asserts zero past slots moved rather than
+claiming it. The forecast's dissemination lag is *measured* from Open-Meteo's
+`meta.json` (7.12 h for ECMWF IFS025), not assumed.
 
 ## How the schedule is computed
 
@@ -128,8 +157,9 @@ on the single highest-weight target. Nothing in it prefers *finishing* anything.
 ## Development
 
 ```bash
-uv run pytest                 # full suite (~110 s; includes property tests)
+uv run pytest                 # offline suite (~110 s; includes property tests)
 uv run pytest -m "not slow"   # fast suite (~5 s)
+uv run pytest -m network      # hits real APIs; deselected by default
 uv run ruff check . && uv run ruff format .
 uv run mypy
 ```
