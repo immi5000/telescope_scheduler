@@ -1,0 +1,31 @@
+{
+  "name": "tscheduler-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "gen:types": "openapi-typescript openapi.json -o src/api/schema.d.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.103.1",
+    "d3-scale": "4.0.2",
+    "d3-shape": "3.2.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@types/d3-scale": "4.0.9",
+    "@types/d3-shape": "3.2.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.0"
+  }
+}

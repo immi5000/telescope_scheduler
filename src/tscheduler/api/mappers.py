@@ -546,6 +546,7 @@ def quality_grid_out(sess: NightSession, index: int) -> schemas.QualityGridOut:
             efficiency=_fl(inp.eta[i], 4),
             preference=_fl(inp.preference[i], 4),
             altitude_deg=_fl(geo.altitude_deg[i], 2),
+            azimuth_deg=_fl(geo.azimuth_deg[i], 2),
             airmass=_fl(geo.airmass[i], 3),
             moon_separation_deg=_fl(geo.moon_separation_deg[i], 2),
             visible=[bool(v) for v in geo.visible[i]],

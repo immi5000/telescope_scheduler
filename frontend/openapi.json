@@ -1,0 +1,2035 @@
+{
+  "components": {
+    "schemas": {
+      "BlockOut": {
+        "properties": {
+          "airmassMax": {
+            "title": "Airmassmax",
+            "type": "number"
+          },
+          "airmassMin": {
+            "title": "Airmassmin",
+            "type": "number"
+          },
+          "altitudeEndDeg": {
+            "title": "Altitudeenddeg",
+            "type": "number"
+          },
+          "altitudeMaxDeg": {
+            "title": "Altitudemaxdeg",
+            "type": "number"
+          },
+          "altitudeMinDeg": {
+            "title": "Altitudemindeg",
+            "type": "number"
+          },
+          "altitudeStartDeg": {
+            "title": "Altitudestartdeg",
+            "type": "number"
+          },
+          "azimuthEndDeg": {
+            "title": "Azimuthenddeg",
+            "type": "number"
+          },
+          "azimuthStartDeg": {
+            "title": "Azimuthstartdeg",
+            "type": "number"
+          },
+          "compass": {
+            "title": "Compass",
+            "type": "string"
+          },
+          "dec": {
+            "title": "Dec",
+            "type": "string"
+          },
+          "decDeg": {
+            "title": "Decdeg",
+            "type": "number"
+          },
+          "endsAt": {
+            "format": "date-time",
+            "title": "Endsat",
+            "type": "string"
+          },
+          "expectedSnr": {
+            "title": "Expectedsnr",
+            "type": "number"
+          },
+          "integratingFrom": {
+            "format": "date-time",
+            "title": "Integratingfrom",
+            "type": "string"
+          },
+          "integratingMinutes": {
+            "title": "Integratingminutes",
+            "type": "number"
+          },
+          "meanCloudFraction": {
+            "title": "Meancloudfraction",
+            "type": "number"
+          },
+          "meanEfficiency": {
+            "title": "Meanefficiency",
+            "type": "number"
+          },
+          "meanPreference": {
+            "title": "Meanpreference",
+            "type": "number"
+          },
+          "moonSeparationMinDeg": {
+            "title": "Moonseparationmindeg",
+            "type": "number"
+          },
+          "nSubs": {
+            "title": "Nsubs",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ra": {
+            "title": "Ra",
+            "type": "string"
+          },
+          "raDeg": {
+            "title": "Radeg",
+            "type": "number"
+          },
+          "slotEnd": {
+            "title": "Slotend",
+            "type": "integer"
+          },
+          "slotStart": {
+            "title": "Slotstart",
+            "type": "integer"
+          },
+          "snrGoal": {
+            "title": "Snrgoal",
+            "type": "number"
+          },
+          "startsAt": {
+            "format": "date-time",
+            "title": "Startsat",
+            "type": "string"
+          },
+          "switchMinutes": {
+            "title": "Switchminutes",
+            "type": "number"
+          },
+          "tSubS": {
+            "title": "Tsubs",
+            "type": "number"
+          },
+          "targetId": {
+            "title": "Targetid",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/WarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "targetId",
+          "name",
+          "slotStart",
+          "slotEnd",
+          "startsAt",
+          "endsAt",
+          "integratingFrom",
+          "switchMinutes",
+          "integratingMinutes",
+          "raDeg",
+          "decDeg",
+          "ra",
+          "dec",
+          "altitudeStartDeg",
+          "altitudeEndDeg",
+          "altitudeMinDeg",
+          "altitudeMaxDeg",
+          "azimuthStartDeg",
+          "azimuthEndDeg",
+          "compass",
+          "airmassMin",
+          "airmassMax",
+          "moonSeparationMinDeg",
+          "nSubs",
+          "tSubS",
+          "expectedSnr",
+          "snrGoal",
+          "meanEfficiency",
+          "meanPreference",
+          "meanCloudFraction",
+          "warnings"
+        ],
+        "title": "BlockOut",
+        "type": "object"
+      },
+      "CatalogEntryOut": {
+        "properties": {
+          "dec": {
+            "title": "Dec",
+            "type": "string"
+          },
+          "decDeg": {
+            "title": "Decdeg",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "magnitude": {
+            "title": "Magnitude",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ra": {
+            "title": "Ra",
+            "type": "string"
+          },
+          "raDeg": {
+            "title": "Radeg",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "raDeg",
+          "decDeg",
+          "ra",
+          "dec",
+          "magnitude"
+        ],
+        "title": "CatalogEntryOut",
+        "type": "object"
+      },
+      "ChangesOut": {
+        "properties": {
+          "addedTargets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Addedtargets",
+            "type": "array"
+          },
+          "changedSlots": {
+            "title": "Changedslots",
+            "type": "integer"
+          },
+          "droppedTargets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Droppedtargets",
+            "type": "array"
+          },
+          "fromPlanId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fromplanid"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "lockedThroughSlot": {
+            "title": "Lockedthroughslot",
+            "type": "integer"
+          },
+          "pastSlotsRewritten": {
+            "title": "Pastslotsrewritten",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fromPlanId",
+          "lockedThroughSlot",
+          "changedSlots",
+          "addedTargets",
+          "droppedTargets",
+          "pastSlotsRewritten",
+          "headline"
+        ],
+        "title": "ChangesOut",
+        "type": "object"
+      },
+      "DecisionPointOut": {
+        "properties": {
+          "addedTargets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Addedtargets",
+            "type": "array"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "changedSlots": {
+            "title": "Changedslots",
+            "type": "integer"
+          },
+          "droppedTargets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Droppedtargets",
+            "type": "array"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "newestPublished": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newestpublished"
+          },
+          "planId": {
+            "title": "Planid",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "recordsKnown": {
+            "title": "Recordsknown",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index",
+          "at",
+          "reason",
+          "planId",
+          "recordsKnown",
+          "newestPublished",
+          "changedSlots",
+          "addedTargets",
+          "droppedTargets"
+        ],
+        "title": "DecisionPointOut",
+        "type": "object"
+      },
+      "DroppedOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "targetId": {
+            "title": "Targetid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "name",
+          "code",
+          "message"
+        ],
+        "title": "DroppedOut",
+        "type": "object"
+      },
+      "EquipmentPresetOut": {
+        "properties": {
+          "apertureMm": {
+            "title": "Aperturemm",
+            "type": "number"
+          },
+          "collectingAreaCm2": {
+            "title": "Collectingareacm2",
+            "type": "number"
+          },
+          "darkCurrentEPerS": {
+            "title": "Darkcurrentepers",
+            "type": "number"
+          },
+          "focalLengthMm": {
+            "title": "Focallengthmm",
+            "type": "number"
+          },
+          "focalRatio": {
+            "title": "Focalratio",
+            "type": "number"
+          },
+          "fovHeightDeg": {
+            "title": "Fovheightdeg",
+            "type": "number"
+          },
+          "fovWidthDeg": {
+            "title": "Fovwidthdeg",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "minBlockMinutes": {
+            "title": "Minblockminutes",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pixelScaleArcsec": {
+            "title": "Pixelscalearcsec",
+            "type": "number"
+          },
+          "pixelSizeUm": {
+            "title": "Pixelsizeum",
+            "type": "number"
+          },
+          "quantumEfficiency": {
+            "title": "Quantumefficiency",
+            "type": "number"
+          },
+          "readNoiseE": {
+            "title": "Readnoisee",
+            "type": "number"
+          },
+          "switchMinutes": {
+            "title": "Switchminutes",
+            "type": "number"
+          },
+          "throughput": {
+            "title": "Throughput",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "apertureMm",
+          "focalLengthMm",
+          "focalRatio",
+          "collectingAreaCm2",
+          "throughput",
+          "pixelSizeUm",
+          "pixelScaleArcsec",
+          "fovWidthDeg",
+          "fovHeightDeg",
+          "readNoiseE",
+          "darkCurrentEPerS",
+          "quantumEfficiency",
+          "switchMinutes",
+          "minBlockMinutes"
+        ],
+        "title": "EquipmentPresetOut",
+        "type": "object"
+      },
+      "EvidenceOut": {
+        "properties": {
+          "estimatedFraction": {
+            "title": "Estimatedfraction",
+            "type": "number"
+          },
+          "hasOracle": {
+            "title": "Hasoracle",
+            "type": "boolean"
+          },
+          "newestPublished": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newestpublished"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records",
+          "sources",
+          "newestPublished",
+          "estimatedFraction",
+          "hasOracle"
+        ],
+        "title": "EvidenceOut",
+        "type": "object"
+      },
+      "GridOut": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "nSlots": {
+            "title": "Nslots",
+            "type": "integer"
+          },
+          "slotMinutes": {
+            "title": "Slotminutes",
+            "type": "integer"
+          },
+          "slotStarts": {
+            "items": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "title": "Slotstarts",
+            "type": "array"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "slotMinutes",
+          "nSlots",
+          "slotStarts"
+        ],
+        "title": "GridOut",
+        "type": "object"
+      },
+      "GridRowOut": {
+        "properties": {
+          "airmass": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Airmass",
+            "type": "array"
+          },
+          "altitudeDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Altitudedeg",
+            "type": "array"
+          },
+          "azimuthDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Azimuthdeg",
+            "type": "array"
+          },
+          "efficiency": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Efficiency",
+            "type": "array"
+          },
+          "moonSeparationDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Moonseparationdeg",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "preference": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Preference",
+            "type": "array"
+          },
+          "targetId": {
+            "title": "Targetid",
+            "type": "string"
+          },
+          "visible": {
+            "items": {
+              "type": "boolean"
+            },
+            "title": "Visible",
+            "type": "array"
+          }
+        },
+        "required": [
+          "targetId",
+          "name",
+          "efficiency",
+          "preference",
+          "altitudeDeg",
+          "azimuthDeg",
+          "airmass",
+          "moonSeparationDeg",
+          "visible"
+        ],
+        "title": "GridRowOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthOut": {
+        "properties": {
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "settings": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "title": "Settings",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "sessions",
+          "settings"
+        ],
+        "title": "HealthOut",
+        "type": "object"
+      },
+      "MoonOut": {
+        "properties": {
+          "altitudeDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Altitudedeg",
+            "type": "array"
+          },
+          "azimuthDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Azimuthdeg",
+            "type": "array"
+          },
+          "illumination": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Illumination",
+            "type": "array"
+          },
+          "maxIllumination": {
+            "title": "Maxillumination",
+            "type": "number"
+          },
+          "phaseAngleDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Phaseangledeg",
+            "type": "array"
+          },
+          "riseSlot": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Riseslot"
+          },
+          "setSlot": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setslot"
+          }
+        },
+        "required": [
+          "altitudeDeg",
+          "azimuthDeg",
+          "illumination",
+          "phaseAngleDeg",
+          "riseSlot",
+          "setSlot",
+          "maxIllumination"
+        ],
+        "title": "MoonOut",
+        "type": "object"
+      },
+      "PlanOut": {
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/BlockOut"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/ChangesOut"
+          },
+          "cloudFraction": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Cloudfraction",
+            "type": "array"
+          },
+          "decisionCount": {
+            "title": "Decisioncount",
+            "type": "integer"
+          },
+          "decisionIndex": {
+            "title": "Decisionindex",
+            "type": "integer"
+          },
+          "dropped": {
+            "items": {
+              "$ref": "#/components/schemas/DroppedOut"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceOut"
+          },
+          "gap": {
+            "title": "Gap",
+            "type": "number"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "number"
+          },
+          "planId": {
+            "title": "Planid",
+            "type": "string"
+          },
+          "progress": {
+            "items": {
+              "$ref": "#/components/schemas/TargetProgressOut"
+            },
+            "title": "Progress",
+            "type": "array"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "seeingFwhmArcsec": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Seeingfwhmarcsec",
+            "type": "array"
+          },
+          "sessionId": {
+            "title": "Sessionid",
+            "type": "string"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/SlotOut"
+            },
+            "title": "Slots",
+            "type": "array"
+          },
+          "solveMs": {
+            "title": "Solvems",
+            "type": "number"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "validFrom": {
+            "format": "date-time",
+            "title": "Validfrom",
+            "type": "string"
+          },
+          "validUntil": {
+            "format": "date-time",
+            "title": "Validuntil",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "planId",
+          "decisionIndex",
+          "decisionCount",
+          "asOf",
+          "validFrom",
+          "validUntil",
+          "reason",
+          "status",
+          "objective",
+          "gap",
+          "solveMs",
+          "summary",
+          "blocks",
+          "slots",
+          "dropped",
+          "progress",
+          "cloudFraction",
+          "seeingFwhmArcsec",
+          "evidence",
+          "changes"
+        ],
+        "title": "PlanOut",
+        "type": "object"
+      },
+      "PresetsOut": {
+        "properties": {
+          "catalog": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogEntryOut"
+            },
+            "title": "Catalog",
+            "type": "array"
+          },
+          "defaultTargetIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Defaulttargetids",
+            "type": "array"
+          },
+          "equipment": {
+            "items": {
+              "$ref": "#/components/schemas/EquipmentPresetOut"
+            },
+            "title": "Equipment",
+            "type": "array"
+          },
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/SitePresetOut"
+            },
+            "title": "Sites",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sites",
+          "equipment",
+          "catalog",
+          "defaultTargetIds"
+        ],
+        "title": "PresetsOut",
+        "type": "object"
+      },
+      "QualityGridOut": {
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "cloudFraction": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Cloudfraction",
+            "type": "array"
+          },
+          "nSlots": {
+            "title": "Nslots",
+            "type": "integer"
+          },
+          "planId": {
+            "title": "Planid",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/GridRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "seeingFwhmArcsec": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Seeingfwhmarcsec",
+            "type": "array"
+          },
+          "sessionId": {
+            "title": "Sessionid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "asOf",
+          "planId",
+          "nSlots",
+          "rows",
+          "cloudFraction",
+          "seeingFwhmArcsec"
+        ],
+        "title": "QualityGridOut",
+        "type": "object"
+      },
+      "SessionListItemOut": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "decisionPoints": {
+            "title": "Decisionpoints",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "nTargets": {
+            "title": "Ntargets",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nightStart": {
+            "format": "date-time",
+            "title": "Nightstart",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "createdAt",
+          "nightStart",
+          "nTargets",
+          "decisionPoints"
+        ],
+        "title": "SessionListItemOut",
+        "type": "object"
+      },
+      "SessionOut": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "decisionPoints": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionPointOut"
+            },
+            "title": "Decisionpoints",
+            "type": "array"
+          },
+          "distinctPlans": {
+            "title": "Distinctplans",
+            "type": "integer"
+          },
+          "equipment": {
+            "$ref": "#/components/schemas/EquipmentPresetOut"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "foldSeconds": {
+            "title": "Foldseconds",
+            "type": "number"
+          },
+          "grid": {
+            "$ref": "#/components/schemas/GridOut"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "moon": {
+            "$ref": "#/components/schemas/MoonOut"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "progress": {
+            "title": "Progress",
+            "type": "number"
+          },
+          "site": {
+            "$ref": "#/components/schemas/SitePresetOut"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "sunAltitudeDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Sunaltitudedeg",
+            "type": "array"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/TargetOut"
+            },
+            "title": "Targets",
+            "type": "array"
+          },
+          "twilight": {
+            "items": {
+              "$ref": "#/components/schemas/TwilightBandOut"
+            },
+            "title": "Twilight",
+            "type": "array"
+          },
+          "weatherSource": {
+            "title": "Weathersource",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "progress",
+          "message",
+          "createdAt",
+          "site",
+          "equipment",
+          "grid",
+          "targets",
+          "weatherSource",
+          "sunAltitudeDeg",
+          "twilight",
+          "moon",
+          "decisionPoints",
+          "distinctPlans",
+          "foldSeconds"
+        ],
+        "title": "SessionOut",
+        "type": "object"
+      },
+      "SessionRequest": {
+        "properties": {
+          "date": {
+            "description": "night start date, UTC, YYYY-MM-DD",
+            "title": "Date",
+            "type": "string"
+          },
+          "equipmentId": {
+            "default": "sct8-2600mm",
+            "title": "Equipmentid",
+            "type": "string"
+          },
+          "hours": {
+            "default": 8.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 16.0,
+            "title": "Hours",
+            "type": "number"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "site": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SiteRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "overrides siteId when present"
+          },
+          "siteId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "urbana",
+            "title": "Siteid"
+          },
+          "slotMinutes": {
+            "default": 5,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Slotminutes",
+            "type": "integer"
+          },
+          "snrGoal": {
+            "default": 60.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Snrgoal",
+            "type": "number"
+          },
+          "solveSeconds": {
+            "default": 4.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 60.0,
+            "title": "Solveseconds",
+            "type": "number"
+          },
+          "startHourUtc": {
+            "default": 1.0,
+            "exclusiveMaximum": 24.0,
+            "minimum": 0.0,
+            "title": "Starthourutc",
+            "type": "number"
+          },
+          "tSubS": {
+            "default": 90.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Tsubs",
+            "type": "number"
+          },
+          "targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TargetRequest"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targets"
+          },
+          "weather": {
+            "default": "synthetic",
+            "description": "'synthetic' (offline, deterministic) or 'open_meteo' (real archived runs)",
+            "title": "Weather",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "SessionRequest",
+        "type": "object"
+      },
+      "SitePresetOut": {
+        "properties": {
+          "artificialZenithNl": {
+            "title": "Artificialzenithnl",
+            "type": "number"
+          },
+          "bortle": {
+            "title": "Bortle",
+            "type": "integer"
+          },
+          "elevationM": {
+            "title": "Elevationm",
+            "type": "number"
+          },
+          "extinctionK": {
+            "title": "Extinctionk",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "latitudeDeg": {
+            "title": "Latitudedeg",
+            "type": "number"
+          },
+          "longitudeDeg": {
+            "title": "Longitudedeg",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "zenithSkyMagArcsec2": {
+            "title": "Zenithskymagarcsec2",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "latitudeDeg",
+          "longitudeDeg",
+          "elevationM",
+          "bortle",
+          "extinctionK",
+          "artificialZenithNl",
+          "zenithSkyMagArcsec2"
+        ],
+        "title": "SitePresetOut",
+        "type": "object"
+      },
+      "SiteRequest": {
+        "properties": {
+          "bortle": {
+            "default": 5,
+            "maximum": 9.0,
+            "minimum": 1.0,
+            "title": "Bortle",
+            "type": "integer"
+          },
+          "elevationM": {
+            "default": 0.0,
+            "title": "Elevationm",
+            "type": "number"
+          },
+          "extinctionK": {
+            "default": 0.2,
+            "exclusiveMaximum": 2.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Extinctionk",
+            "type": "number"
+          },
+          "latitudeDeg": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitudedeg",
+            "type": "number"
+          },
+          "longitudeDeg": {
+            "description": "positive EAST",
+            "maximum": 360.0,
+            "minimum": -180.0,
+            "title": "Longitudedeg",
+            "type": "number"
+          },
+          "minAltitudeDeg": {
+            "default": 30.0,
+            "exclusiveMaximum": 90.0,
+            "minimum": 0.0,
+            "title": "Minaltitudedeg",
+            "type": "number"
+          },
+          "minMoonSeparationDeg": {
+            "default": 15.0,
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Minmoonseparationdeg",
+            "type": "number"
+          },
+          "name": {
+            "default": "custom",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "latitudeDeg",
+          "longitudeDeg"
+        ],
+        "title": "SiteRequest",
+        "type": "object"
+      },
+      "SlotOut": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "locked": {
+            "title": "Locked",
+            "type": "boolean"
+          },
+          "slot": {
+            "title": "Slot",
+            "type": "integer"
+          },
+          "targetId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targetid"
+          }
+        },
+        "required": [
+          "slot",
+          "kind",
+          "targetId",
+          "locked"
+        ],
+        "title": "SlotOut",
+        "type": "object"
+      },
+      "TargetOut": {
+        "properties": {
+          "dec": {
+            "title": "Dec",
+            "type": "string"
+          },
+          "decDeg": {
+            "title": "Decdeg",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "magnitude": {
+            "title": "Magnitude",
+            "type": "number"
+          },
+          "maxAltitudeDeg": {
+            "title": "Maxaltitudedeg",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "number"
+          },
+          "ra": {
+            "title": "Ra",
+            "type": "string"
+          },
+          "raDeg": {
+            "title": "Radeg",
+            "type": "number"
+          },
+          "requiredRefMinutes": {
+            "title": "Requiredrefminutes",
+            "type": "number"
+          },
+          "snrGoal": {
+            "title": "Snrgoal",
+            "type": "number"
+          },
+          "transitSlot": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transitslot"
+          },
+          "urgency": {
+            "title": "Urgency",
+            "type": "number"
+          },
+          "visibleSlots": {
+            "title": "Visibleslots",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "raDeg",
+          "decDeg",
+          "ra",
+          "dec",
+          "magnitude",
+          "priority",
+          "urgency",
+          "snrGoal",
+          "requiredRefMinutes",
+          "visibleSlots",
+          "maxAltitudeDeg",
+          "transitSlot"
+        ],
+        "title": "TargetOut",
+        "type": "object"
+      },
+      "TargetProgressOut": {
+        "properties": {
+          "accumulatedRefMinutes": {
+            "title": "Accumulatedrefminutes",
+            "type": "number"
+          },
+          "expectedSnr": {
+            "title": "Expectedsnr",
+            "type": "number"
+          },
+          "fraction": {
+            "title": "Fraction",
+            "type": "number"
+          },
+          "included": {
+            "title": "Included",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "observingSlots": {
+            "title": "Observingslots",
+            "type": "integer"
+          },
+          "requiredRefMinutes": {
+            "title": "Requiredrefminutes",
+            "type": "number"
+          },
+          "snrGoal": {
+            "title": "Snrgoal",
+            "type": "number"
+          },
+          "targetId": {
+            "title": "Targetid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "name",
+          "included",
+          "accumulatedRefMinutes",
+          "requiredRefMinutes",
+          "fraction",
+          "expectedSnr",
+          "snrGoal",
+          "observingSlots"
+        ],
+        "title": "TargetProgressOut",
+        "type": "object"
+      },
+      "TargetRequest": {
+        "properties": {
+          "decDeg": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decdeg"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "magnitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "V surface brightness, mag/arcsec^2",
+            "title": "Magnitude"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "priority": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Priority",
+            "type": "number"
+          },
+          "raDeg": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 360.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Radeg"
+          },
+          "snrGoal": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snrgoal"
+          },
+          "urgency": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Urgency",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "TargetRequest",
+        "type": "object"
+      },
+      "TwilightBandOut": {
+        "properties": {
+          "endsAt": {
+            "format": "date-time",
+            "title": "Endsat",
+            "type": "string"
+          },
+          "fromSlot": {
+            "title": "Fromslot",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "startsAt": {
+            "format": "date-time",
+            "title": "Startsat",
+            "type": "string"
+          },
+          "toSlot": {
+            "title": "Toslot",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "fromSlot",
+          "toSlot",
+          "startsAt",
+          "endsAt"
+        ],
+        "title": "TwilightBandOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WarningOut": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "text",
+          "action"
+        ],
+        "title": "WarningOut",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "summary": "Real-time visible-light night scheduler with a no-lookahead replay.",
+    "title": "Telescope Scheduler",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/events": {
+      "get": {
+        "description": "Server-sent notifications. Handlers should do one thing: refetch.\n\nNothing here carries plan data, so live and replay share a single\nfetching path and the whole stream can be swapped for a poll.",
+        "operationId": "events_api_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Events",
+        "tags": [
+          "stream"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/presets": {
+      "get": {
+        "operationId": "get_presets_api_presets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Presets",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "operationId": "list_sessions_api_sessions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionListItemOut"
+                  },
+                  "title": "Response List Sessions Api Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Sessions",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "post": {
+        "operationId": "create_session_api_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}": {
+      "delete": {
+        "operationId": "delete_session_api_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Session",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "get": {
+        "operationId": "get_session_api_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/grid": {
+      "get": {
+        "operationId": "get_grid_api_sessions__session_id__grid_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "as_of",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualityGridOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Grid",
+        "tags": [
+          "plan"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/plan": {
+      "get": {
+        "operationId": "get_plan_api_sessions__session_id__plan_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ISO-8601 instant. The plan in force then; omitted means dusk.",
+            "in": "query",
+            "name": "as_of",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO-8601 instant. The plan in force then; omitted means dusk.",
+              "title": "As Of"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Plan",
+        "tags": [
+          "plan"
+        ]
+      }
+    }
+  }
+}

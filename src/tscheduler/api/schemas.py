@@ -356,6 +356,7 @@ class GridRowOut(Api):
     efficiency: list[float]
     preference: list[float]
     altitude_deg: list[float]
+    azimuth_deg: list[float]
     airmass: list[float]
     moon_separation_deg: list[float]
     visible: list[bool]

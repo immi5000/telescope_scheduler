@@ -96,6 +96,11 @@ def solve_naive(
             end += 1
         t = inp.target_ids.index(tid)
         data = [k for k in range(i, end) if slot_kind[k] is SlotKind.OBSERVE]
+        if not data:
+            # See cpsat._extract: a run with no integrating slot is an
+            # abandoned slew, not a block.
+            i = end
+            continue
         blocks.append(
             Block(
                 target_id=tid,

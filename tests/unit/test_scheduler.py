@@ -439,3 +439,36 @@ def test_switch_slots_in_history_are_not_counted_as_progress() -> None:
     # One slot of history reclassified from exposure to slew costs exactly one
     # slot of the remaining night -- no more, and crucially no less.
     assert banked_seven == banked_eight + 1
+
+
+def test_an_abandoned_slew_is_not_reported_as_a_block() -> None:
+    """A run of slots that never integrates must not become an instruction card.
+
+    It arises naturally at a re-plan boundary: the observer started slewing to a
+    target, and by the next decision point the plan wants that target later. The
+    slew really happened, so the slot assignments keep it -- but as a Block it
+    renders as "0 x 90 s, expected SNR 0", which tells the observer nothing and
+    reads like a defect in the plan.
+    """
+    inp = make_input(
+        n_targets=2,
+        n_slots=40,
+        eta=1.0,
+        need_ref_s=1500.0,
+        # History ends mid-slew onto t0: the last locked slot is assigned to it
+        # but collected nothing.
+        locked={**dict.fromkeys(range(9), "t1"), 9: "t0"},
+        locked_observing=frozenset(range(9)),
+        first_free_slot=10,
+    )
+    plan = build_and_solve(inp, AS_OF, FAST)
+    assert plan.status in {"OPTIMAL", "FEASIBLE"}
+
+    for b in plan.blocks:
+        data = b.n_slots - b.switch_slots
+        assert data > 0, f"block {b.target_id} {b.slot_start}-{b.slot_end} integrates nothing"
+        assert b.n_subs > 0
+
+    # The minutes are still on the record, just not as a block.
+    assert plan.assignments[9].target_id == "t0"
+    assert plan.assignments[9].kind is SlotKind.SWITCH

@@ -40,3 +40,8 @@ build/
 .vscode/
 *.swp
 .ipynb_checkpoints/
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+.playwright-mcp/

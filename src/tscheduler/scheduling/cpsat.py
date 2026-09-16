@@ -503,6 +503,16 @@ def _extract(
             end += 1
         t = inp.target_ids.index(tid)
         data_slots = [k for k in range(s, end) if slot_kind[k] is SlotKind.OBSERVE]
+        if not data_slots:
+            # A run that never integrates is an abandoned slew, not a block.
+            # It happens at a re-plan boundary: the observer began slewing to a
+            # target, and by the next decision point the plan wants that target
+            # later (or not at all). Emitting it as a Block produced instruction
+            # cards reading "0 x 90 s, expected SNR 0", which is noise.
+            # The slot assignments keep the record -- those minutes really were
+            # spent -- so nothing is hidden by leaving it out of the blocks.
+            s = end
+            continue
         n_subs = int(sum(int(inp.subs_per_slot[t, k]) for k in data_slots))
         snr = block_expected_snr(inp, t, data_slots)
         blocks.append(

@@ -1,0 +1,291 @@
+/*
+ * Night mode is a requirement, not a nicety: dark adaptation takes 20-30
+ * minutes to build and seconds of blue light to destroy. So the red theme is
+ * the DEFAULT, not a toggle someone has to find at 1 a.m.
+ *
+ * It is a token swap, deliberately NOT a global `filter: hue-rotate()`. That
+ * filter destroys every contrast ratio you chose on purpose, mangles canvas
+ * content, and forces the whole page through GPU compositing on every cursor
+ * frame -- which shows up directly as scrub jank.
+ *
+ * With only one hue available, severity is encoded by LUMINANCE and TEXTURE
+ * rather than colour, since red-on-red cannot carry a traffic-light scale.
+ */
+
+:root {
+  --bg: #07090c;
+  --panel: #0e1218;
+  --panel-2: #141a22;
+  --line: #222b36;
+  --ink: #c9d4e2;
+  --ink-dim: #7c8a9c;
+  --ink-faint: #4c5765;
+  --accent: #5aa9ff;
+  --ok: #46c08a;
+  --warn: #e0a33c;
+  --crit: #e0614f;
+  --locked: #2a3340;
+  --font: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --radius: 6px;
+  color-scheme: dark;
+}
+
+:root[data-night="on"] {
+  --bg: #000000;
+  --panel: #0a0202;
+  --panel-2: #140404;
+  --line: #3a0d0d;
+  --ink: #ff6a5a;
+  --ink-dim: #a83a30;
+  --ink-faint: #6b241e;
+  --accent: #ff8f7a;
+  --ok: #ff6a5a;
+  --warn: #ffb0a0;
+  --crit: #ffd9d0;
+  --locked: #1c0606;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 13px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 0 16px 32px;
+  gap: 12px;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+h2 {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin: 0 0 8px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.grow {
+  flex: 1 1 auto;
+}
+
+.dim {
+  color: var(--ink-dim);
+}
+
+.faint {
+  color: var(--ink-faint);
+}
+
+.mono-num {
+  font-variant-numeric: tabular-nums;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+select,
+input,
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 8px;
+}
+
+input[type="range"] {
+  padding: 0;
+  background: transparent;
+  border: none;
+  accent-color: var(--accent);
+}
+
+button {
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.chip.ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+.chip.warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.chip.crit {
+  color: var(--crit);
+  border-color: color-mix(in srgb, var(--crit) 55%, transparent);
+  /* Texture, not just colour: in red mode hue cannot carry severity. */
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 3px,
+    color-mix(in srgb, var(--crit) 14%, transparent) 3px 6px
+  );
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.card.past {
+  opacity: 0.45;
+}
+
+.card.current {
+  border-color: var(--accent);
+}
+
+.coord {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.copy {
+  padding: 1px 6px;
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+.meter {
+  height: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.meter > i {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+
+.warnrow {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 11px;
+  padding: 3px 0;
+  border-top: 1px dashed var(--line);
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.scrollx {
+  overflow-x: auto;
+}
+
+.empty {
+  color: var(--ink-faint);
+  padding: 28px 0;
+  text-align: center;
+}
+
+svg text {
+  fill: var(--ink-dim);
+  font: 10px var(--font);
+}
