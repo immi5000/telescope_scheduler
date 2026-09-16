@@ -49,6 +49,7 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["T20"]
+"scripts/**" = ["T20"]   # CLI tools print by definition
 "src/tscheduler/core/clock.py" = ["DTZ"]   # the one module allowed to read a wall clock
 
 [tool.mypy]
