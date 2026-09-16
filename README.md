@@ -24,11 +24,50 @@ Backend core is built and tested. Milestones 0–6 of 10 are complete.
 | 5 | CP-SAT scheduler | done |
 | 6 | No-lookahead property test | done |
 | 7 | Real providers — Open-Meteo + CelesTrak done; Space-Track, ALeRCE next | partial |
-| 8 | Persistence + FastAPI + SSE | |
+| 8 | FastAPI + SSE — server done; SQLite persistence next | partial |
 | 9 | React frontend | |
 | 10 | Three-arm evaluation | done |
 
-## Try it
+## Run the server
+
+```bash
+uv sync --group dev --extra api
+uv run python -m tscheduler.api            # http://127.0.0.1:8000
+uv run python -m tscheduler.api --reload   # restart on source changes
+```
+
+Interactive API docs are at <http://127.0.0.1:8000/docs>. A session is one POST:
+
+```bash
+# Fold a night. Returns immediately with 202 and an id; the fold runs in the
+# background and takes a few seconds.
+curl -sX POST localhost:8000/api/sessions -H 'content-type: application/json' \
+     -d '{"date":"2026-09-13","hours":9,"snrGoal":35}'
+
+# Watch it build, then read the night: twilight bands, moon track, targets,
+# and the decision points the replay slider will snap to.
+curl -s localhost:8000/api/sessions/$ID
+
+# The plan in force at an instant. The response carries validFrom/validUntil,
+# so a slider only refetches when the cursor leaves that interval.
+curl -s "localhost:8000/api/sessions/$ID/plan?as_of=2026-09-13T05:00:00Z"
+
+# The efficiency/preference heatmap behind that plan.
+curl -s "localhost:8000/api/sessions/$ID/grid?as_of=2026-09-13T05:00:00Z"
+
+# Notifications: identifiers and progress, never plan data.
+curl -N localhost:8000/api/events
+```
+
+`"weather": "synthetic"` (the default) runs fully offline against several
+deterministic model runs with real publication times. `"weather": "open_meteo"`
+fetches genuine archived runs for that night from the Single Runs API — no key
+required.
+
+Sessions live in memory. Restart the process and they are gone; the fold is a
+pure function of the request, so any session can be rebuilt from it.
+
+## Try it from the command line
 
 ```bash
 uv sync --group dev
@@ -188,7 +227,7 @@ on the single highest-weight target. Nothing in it prefers *finishing* anything.
 ## Development
 
 ```bash
-uv run pytest                 # offline suite (~110 s; includes property tests)
+uv run pytest                 # offline suite (~100 s; includes property tests)
 uv run pytest -m "not slow"   # fast suite (~5 s)
 uv run pytest -m network      # hits real APIs; deselected by default
 uv run ruff check . && uv run ruff format .
