@@ -174,6 +174,9 @@ def run_comparison(
             continue
         first_free = grid.index_of(t)
         locked = {s: prev.assignments[s].target_id for s in range(first_free)}
+        locked_observing = frozenset(
+            s for s in range(first_free) if prev.assignments[s].kind is SlotKind.OBSERVE
+        )
         previous = {s: prev.assignments[s].target_id for s in range(first_free, grid.n_slots)}
         inp, led = build_scheduler_input(
             spec,
@@ -181,6 +184,7 @@ def run_comparison(
             weather,
             AsOf.at(t),
             locked=locked,
+            locked_observing=locked_observing,
             previous_plan=previous,
             first_free_slot=first_free,
         )

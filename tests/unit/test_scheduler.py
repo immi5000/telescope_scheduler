@@ -339,3 +339,103 @@ def test_locked_history_may_exceed_the_over_exposure_cap() -> None:
     assert plan.assignments, "empty assignment tuple means the solve failed"
     for slot, tid in locked.items():
         assert plan.assignments[slot].target_id == tid
+
+
+def test_history_that_can_no_longer_complete_is_dropped_not_infeasible() -> None:
+    """The observer pointed somewhere; the sky then got worse. That must not
+    make the model unsolvable.
+
+    Locked history used to enter the model as forced ``z`` assignments, and
+    ``z <= u`` then turned "the telescope was here" into "this target WILL be
+    completed". But eta is recomputed at every as_of, so a worsening forecast
+    can put completion out of reach while the assignment stays forced -- and
+    the solver returns INFEASIBLE, which for this model is always a bug, since
+    ``u[t]`` makes the all-idle plan available by construction. On a real
+    replayed night that produced an empty plan at the last decision point of
+    the evening.
+
+    History is data now, not a decision: it contributes banked photons and
+    frames as constants and never forces inclusion.
+    """
+    n_slots = 40
+    # The first half of the night banked a little; the rest is nearly useless,
+    # so t0 cannot reach its requirement however the remaining slots are spent.
+    eta = np.ones((2, n_slots))
+    eta[0, :20] = 0.20
+    eta[0, 20:] = 0.01
+
+    inp = make_input(
+        n_targets=2,
+        n_slots=n_slots,
+        eta=eta,
+        need_ref_s=np.array([9000.0, 1500.0]),
+        locked=dict.fromkeys(range(20), "t0"),
+        locked_observing=frozenset(range(20)),
+        first_free_slot=20,
+    )
+    plan = build_and_solve(inp, AS_OF, FAST)
+
+    assert plan.status in {"OPTIMAL", "FEASIBLE"}, plan.status
+    assert plan.assignments, "an empty plan is the failure mode this guards"
+    assert "t0" not in plan.included, "t0 cannot reach its goal and must not be claimed complete"
+    # History is still reported: those photons were collected.
+    for s in range(20):
+        assert plan.assignments[s].target_id == "t0"
+        assert plan.assignments[s].locked
+
+
+def test_continuing_the_in_progress_target_costs_no_switch() -> None:
+    """Crossing a re-plan boundary on the same target is not a slew.
+
+    Without this the scheduler is charged a switch for carrying on doing what
+    the telescope is already doing, and abandons half-finished integration at
+    every re-plan -- which is both wrong and the most annoying possible
+    behaviour for someone standing at an eyepiece.
+    """
+    inp = make_input(
+        n_targets=2,
+        n_slots=40,
+        eta=1.0,
+        need_ref_s=1500.0,
+        locked=dict.fromkeys(range(10), "t0"),
+        locked_observing=frozenset(range(10)),
+        first_free_slot=10,
+    )
+    plan = build_and_solve(inp, AS_OF, FAST)
+    assert plan.status in {"OPTIMAL", "FEASIBLE"}
+
+    # Whatever the solver does at slot 10, it must not be a slew back onto the
+    # target already under the telescope.
+    at_boundary = plan.assignments[10]
+    if at_boundary.target_id == "t0":
+        assert at_boundary.kind is SlotKind.OBSERVE, "continuing must not re-reserve a slew"
+
+
+def test_switch_slots_in_history_are_not_counted_as_progress() -> None:
+    """A slew slot is assigned to its target and collects nothing.
+
+    Counting it as banked progress over-credits every re-plan by the whole slew
+    reservation, which makes targets look closer to done than they are -- and
+    the error compounds, since each re-plan re-reads the same inflated history.
+    """
+    common = {
+        "n_targets": 1,
+        "n_slots": 40,
+        "eta": 1.0,
+        "need_ref_s": 3000.0,
+        "locked": dict.fromkeys(range(8), "t0"),
+        "first_free_slot": 8,
+    }
+
+    def future_slots(observing: frozenset[int]) -> int:
+        plan = build_and_solve(make_input(**common, locked_observing=observing), AS_OF, FAST)
+        assert plan.status in {"OPTIMAL", "FEASIBLE"}
+        assert "t0" in plan.included
+        return len([s for s in observed(plan, "t0") if s >= 8])
+
+    banked_eight = future_slots(frozenset(range(8)))
+    banked_seven = future_slots(frozenset(range(1, 8)))
+
+    # One slot of history reclassified from exposure to slew costs exactly one
+    # slot of the remaining night -- no more, and crucially no less.
+    assert banked_seven == banked_eight + 1

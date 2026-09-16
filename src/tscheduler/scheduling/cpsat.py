@@ -91,6 +91,13 @@ class SchedulerInput:
     without ever out-voting completion."""
     locked: dict[int, str | None] = field(default_factory=dict)
     """slot -> target_id (or None for idle/switch). Immovable history."""
+    locked_observing: frozenset[int] | None = None
+    """Which locked slots actually INTEGRATED, as opposed to slewing or idling.
+
+    A switch slot is assigned to its target but collects nothing, so counting it
+    as progress over-credits every re-plan by the slew reservation. ``None``
+    means "assume every locked slot with a target integrated", which is right
+    for callers that never modelled a slew."""
     previous_plan: dict[int, str | None] = field(default_factory=dict)
     first_free_slot: int = 0
 
@@ -120,6 +127,56 @@ def build_and_solve(
     m = cp_model.CpModel()
 
     W, L = inp.switch_slots, inp.min_block_slots  # noqa: N806 - paper's symbols
+    slot_s = inp.grid.slot_seconds
+
+    # --- history is DATA, not a decision --------------------------------------
+    # The past gets no variables at all. Modelling it as forced assignments and
+    # letting the structural constraints run over it reads as the same thing and
+    # is not: it makes the model claim things about history it cannot know.
+    #
+    # Two ways that bites, both observed on a real replayed night. C8
+    # (z <= u) turns "the observer pointed here" into "this target WILL be
+    # completed" -- but eta is recomputed at each as_of, so a worsening forecast
+    # can put completion out of reach while the assignment stays forced, and the
+    # model goes INFEASIBLE. And the presolve mask itself depends on the
+    # forecast, so a locked slot can simply vanish from the model, splitting a
+    # block in two and tripping the minimum-length rule.
+    #
+    # INFEASIBLE is a bug in this model by construction -- u[t] makes the
+    # all-idle plan always available -- so either failure returns an empty plan
+    # in the middle of a night. History enters as constants instead.
+    s0 = inp.first_free_slot
+    if inp.locked:
+        s0 = max(s0, max(inp.locked) + 1)
+    s0 = min(max(s0, 0), n_s)
+
+    observing = (
+        inp.locked_observing
+        if inp.locked_observing is not None
+        else frozenset(s for s, tid in inp.locked.items() if tid is not None)
+    )
+    index_of = {tid: t for t, tid in enumerate(inp.target_ids)}
+
+    # Banked progress, valued under the CURRENT forecast. That is deliberate:
+    # for hours already past, the newest run is the best estimate of what the
+    # sky actually did, so a night that clouded over early correctly reports
+    # less progress than was projected at dusk -- which is precisely the signal
+    # that should make the scheduler give the target more time or give up on it.
+    hist_gain = [0] * n_t
+    hist_frames = [0] * n_t
+    for sl in sorted(observing):
+        tid = inp.locked.get(sl)
+        t = index_of.get(tid) if tid is not None else None
+        if t is None or not 0 <= sl < n_s:
+            continue
+        hist_gain[t] += round(SCALE * slot_s * float(inp.eta[t, sl]))
+        hist_frames[t] += int(inp.subs_per_slot[t, sl])
+
+    #: The target the telescope is sitting on at the boundary, if any. Continuing
+    #: it must cost no switch and reserve no slew -- otherwise every re-plan
+    #: charges the observer to keep doing what they are already doing, and the
+    #: scheduler abandons whatever is half-finished.
+    boundary = inp.locked.get(s0 - 1) if s0 > 0 else None
 
     # --- presolve: never create variables for impossible (t, s) pairs ---------
     # Typically removes 40-60% of the model before the solver sees it.
@@ -129,7 +186,7 @@ def build_and_solve(
     x: dict[tuple[int, int], cp_model.IntVar] = {}
     b: dict[tuple[int, int], cp_model.IntVar] = {}
     for t in range(n_t):
-        for s in range(n_s):
+        for s in range(s0, n_s):
             if feasible[t, s]:
                 z[t, s] = m.new_bool_var(f"z{t}_{s}")
                 x[t, s] = m.new_bool_var(f"x{t}_{s}")
@@ -141,13 +198,13 @@ def build_and_solve(
         return z.get((t, s))
 
     # --- C1: at most one target per slot -------------------------------------
-    for s in range(n_s):
+    for s in range(s0, n_s):
         here = [z[t, s] for t in range(n_t) if (t, s) in z]
         if here:
             m.add_at_most_one(here)
 
     for t in range(n_t):
-        for s in range(n_s):
+        for s in range(s0, n_s):
             if (t, s) not in z:
                 continue
             # --- C2: data implies pointing ----------------------------------
@@ -159,8 +216,17 @@ def build_and_solve(
             # b = z[s] AND NOT z[s-1]. All three are needed: the first alone is
             # only valid under minimisation pressure, and b appears in the
             # accumulation constraint where an over-estimate would be unsound.
-            prev = zv(t, s - 1) if s > 0 else None
-            if prev is None:
+            # At the boundary, z[t, s0-1] is a CONSTANT from history, not a
+            # variable: 1 for the target already under the telescope, 0 for
+            # everything else. The same b = z[s] AND NOT z[s-1] definition then
+            # collapses to "continuing costs nothing, starting is a new block".
+            prev = zv(t, s - 1) if s > s0 else None
+            if s == s0:
+                if boundary is not None and boundary == inp.target_ids[t]:
+                    m.add(b[t, s] == 0)
+                else:
+                    m.add(b[t, s] == z[t, s])
+            elif prev is None:
                 m.add(b[t, s] == z[t, s])
             else:
                 m.add(b[t, s] >= z[t, s] - prev)
@@ -203,29 +269,30 @@ def build_and_solve(
 
     # --- C11: symmetry breaking / search reduction ---------------------------
     for t in range(n_t):
-        starts = [b[t, s] for s in range(n_s) if (t, s) in b]
+        starts = [b[t, s] for s in range(s0, n_s) if (t, s) in b]
         if starts:
             m.add(sum(starts) <= inp.max_blocks_per_target)
 
     # --- C7 / C7b: effective-exposure accumulation ---------------------------
-    slot_s = inp.grid.slot_seconds
     for t in range(n_t):
         gained = []
-        for s in range(n_s):
+        for s in range(s0, n_s):
             if (t, s) in x:
                 gained.append(round(SCALE * slot_s * float(inp.eta[t, s])) * x[t, s])
         # Debit the fractional slew remainder from the first data slot.
         if inp.switch_remainder > 0.0:
-            for s in range(n_s):
+            for s in range(s0, n_s):
                 if (t, s) in b and (t, s + W) in x:
                     debit = round(SCALE * slot_s * inp.switch_remainder * float(inp.eta[t, s + W]))
                     if debit:
                         gained.append(-debit * b[t, s])
-        if not gained:
-            m.add(u[t] == 0)
-            continue
+        # Banked progress is a constant on the left-hand side. Note this stays
+        # correct when there is no future at all: a target already finished
+        # before the boundary may still be marked complete, and one that cannot
+        # finish is simply not included rather than making the model unsolvable.
+        future = cp_model.LinearExpr.sum(gained)
         need = round(SCALE * float(inp.required_ref_seconds[t]) * (1.0 + inp.completion_margin))
-        m.add(sum(gained) >= need * u[t])
+        m.add(hist_gain[t] + future >= need * u[t])
 
         # Over-exposure cap: without it the optimizer can dump the whole night on
         # one high-weight target rather than completing several.
@@ -238,7 +305,8 @@ def build_and_solve(
         # what happened on the first end-to-end run: all 12 targets dropped with
         # an OPTIMAL empty plan. Floor the cap at what one minimum-length block
         # necessarily delivers.
-        best_eta = float(np.max(inp.eta[t])) if inp.eta[t].size else 0.0
+        future_eta = inp.eta[t, s0:]
+        best_eta = float(np.max(future_eta)) if future_eta.size else 0.0
         min_block_delivery = round(SCALE * slot_s * best_eta * (L + W))
         cap = max(round(need * (1.0 + inp.overexposure_allowance)), min_block_delivery)
 
@@ -248,35 +316,17 @@ def build_and_solve(
         # mid-night re-plan on a nearly-finished target makes the whole model
         # INFEASIBLE. That is not hypothetical: replaying a real night hit it at
         # the third decision point and returned an empty plan.
-        locked_gain = round(
-            SCALE
-            * slot_s
-            * sum(
-                float(inp.eta[t, sl])
-                for sl, tid in inp.locked.items()
-                if tid == inp.target_ids[t] and sl < n_s
-            )
-        )
-        cap += locked_gain
+        cap = max(cap, hist_gain[t] + min_block_delivery)
         # only_enforce_if, NOT a big-M. An earlier version wrote
         #     sum(gained) <= cap + (1 - u[t]) * 1e9
         # which is the exact thing this model was chosen to avoid: the 1e9
         # destroys the LP relaxation and the optimality gap sat at 84% after 5
         # seconds. The reified form is both correct and tight.
-        m.add(sum(gained) <= cap).only_enforce_if(u[t])
+        m.add(hist_gain[t] + future <= cap).only_enforce_if(u[t])
 
         # --- C9: frame count, linear ------------------------------------------
-        frames = [int(inp.subs_per_slot[t, s]) * x[t, s] for s in range(n_s) if (t, s) in x]
-        if frames:
-            m.add(sum(frames) >= inp.min_subs * u[t])
-
-    # --- C10: locked past ----------------------------------------------------
-    for s, tid in inp.locked.items():
-        for t in range(n_t):
-            if (t, s) not in z:
-                continue
-            want = 1 if tid == inp.target_ids[t] else 0
-            m.add(z[t, s] == want)
+        frames = [int(inp.subs_per_slot[t, s]) * x[t, s] for s in range(s0, n_s) if (t, s) in x]
+        m.add(hist_frames[t] + cp_model.LinearExpr.sum(frames) >= inp.min_subs * u[t])
 
     # --- objective -----------------------------------------------------------
     terms = []
@@ -296,7 +346,7 @@ def build_and_solve(
     for t in range(n_t):
         terms.append(round(SCALE * float(inp.weight[t]) * n_s) * u[t])
     for t in range(n_t):
-        for s in range(n_s):
+        for s in range(s0, n_s):
             if (t, s) in x:
                 c = (
                     SCALE
@@ -313,7 +363,7 @@ def build_and_solve(
     # previous plan assigned to t0, "changed" is just (1 - z[t0,s]).
     if inp.previous_plan:
         for s, tid in inp.previous_plan.items():
-            if s < inp.first_free_slot:
+            if s < s0:
                 continue
             pen = round(SCALE * inp.change_penalty)
             if not pen:
@@ -371,7 +421,18 @@ def build_and_solve(
         )
 
     return _extract(
-        inp, as_of, solver, z, x, b, u, status_name, elapsed_ms, ledger or EvidenceLedger()
+        inp,
+        as_of,
+        solver,
+        z,
+        x,
+        b,
+        u,
+        status_name,
+        elapsed_ms,
+        ledger or EvidenceLedger(),
+        s0=s0,
+        observing=observing,
     )
 
 
@@ -401,14 +462,25 @@ def _extract(
     status_name: str,
     elapsed_ms: float,
     ledger: EvidenceLedger,
+    *,
+    s0: int,
+    observing: frozenset[int],
 ) -> Plan:
     n_t, n_s = len(inp.target_ids), inp.grid.n_slots
     assignments, blocks = [], []
     included = {inp.target_ids[t] for t in range(n_t) if solver.value(u[t])}
 
+    # History is replayed from the record, not read back out of the solver --
+    # it never entered the model.
     slot_target: list[str | None] = [None] * n_s
     slot_kind: list[SlotKind] = [SlotKind.IDLE] * n_s
-    for s in range(n_s):
+    for s in range(min(s0, n_s)):
+        tid = inp.locked.get(s)
+        slot_target[s] = tid
+        if tid is not None:
+            slot_kind[s] = SlotKind.OBSERVE if s in observing else SlotKind.SWITCH
+
+    for s in range(s0, n_s):
         for t in range(n_t):
             if (t, s) in z and solver.value(z[t, s]):
                 slot_target[s] = inp.target_ids[t]
@@ -417,7 +489,7 @@ def _extract(
 
     for s in range(n_s):
         assignments.append(
-            Assignment(slot=s, kind=slot_kind[s], target_id=slot_target[s], locked=s in inp.locked)
+            Assignment(slot=s, kind=slot_kind[s], target_id=slot_target[s], locked=s < s0)
         )
 
     s = 0

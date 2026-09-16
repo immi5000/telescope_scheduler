@@ -62,6 +62,7 @@ def build_scheduler_input(
     *,
     previous_plan: dict[int, str | None] | None = None,
     locked: dict[int, str | None] | None = None,
+    locked_observing: frozenset[int] | None = None,
     first_free_slot: int = 0,
     satellite_risk: SatelliteRiskModel | None = None,
 ) -> tuple[SchedulerInput, EvidenceLedger]:
@@ -154,6 +155,7 @@ def build_scheduler_input(
         switch_remainder=grid.fractional_remainder(spec.mount.switch_minutes),
         min_block_slots=max(int(spec.mount.min_block_minutes // grid.slot_minutes), 1),
         locked=locked or {},
+        locked_observing=locked_observing,
         previous_plan=previous_plan or {},
         first_free_slot=first_free_slot,
     )

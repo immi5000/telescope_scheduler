@@ -33,7 +33,7 @@ from numpy.typing import NDArray
 from tscheduler.api.presets import EquipmentPreset, SitePreset
 from tscheduler.api.weather import synthetic_forecast
 from tscheduler.core.clock import AsOf
-from tscheduler.domain.plan import Plan
+from tscheduler.domain.plan import Plan, SlotKind
 from tscheduler.physics.geometry import NightGeometry
 from tscheduler.pipeline.builder import SessionSpec, build_geometry, build_scheduler_input
 from tscheduler.providers.weather.base import WeatherForecastProvider
@@ -187,9 +187,15 @@ def fold_night(
             first_free = grid.index_of(t) if t > grid.start else 0
 
             locked: dict[int, str | None] = {}
+            locked_observing: frozenset[int] = frozenset()
             previous: dict[int, str | None] = {}
             if prev is not None:
                 locked = {s: prev.assignments[s].target_id for s in range(first_free)}
+                # A slew slot is assigned to its target but collects nothing.
+                # Counting it as banked progress over-credits every re-plan.
+                locked_observing = frozenset(
+                    s for s in range(first_free) if prev.assignments[s].kind is SlotKind.OBSERVE
+                )
                 previous = {
                     s: prev.assignments[s].target_id for s in range(first_free, grid.n_slots)
                 }
@@ -200,6 +206,7 @@ def fold_night(
                 provider,
                 as_of,
                 locked=locked,
+                locked_observing=locked_observing,
                 previous_plan=previous,
                 first_free_slot=first_free,
             )

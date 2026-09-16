@@ -19,6 +19,7 @@ from datetime import UTC, datetime, timedelta
 from tscheduler.core.clock import AsOf
 from tscheduler.core.timegrid import TimeGrid
 from tscheduler.domain.equipment import Camera, Mount, Optics
+from tscheduler.domain.plan import SlotKind
 from tscheduler.domain.site import Site
 from tscheduler.domain.targets import Target
 from tscheduler.physics.convert import bortle_to_artificial_nl
@@ -110,10 +111,14 @@ def main() -> None:
         # history every time a forecast arrived, which is both wrong and the
         # easiest way to accidentally manufacture a good-looking result.
         first_free = grid.index_of(t) if t > grid.start else 0
-        locked: dict[str, object] = {}
-        previous: dict[str, object] = {}
+        locked: dict[int, str | None] = {}
+        locked_observing: frozenset[int] = frozenset()
+        previous: dict[int, str | None] = {}
         if prev_plan is not None:
             locked = {s: prev_plan.assignments[s].target_id for s in range(first_free)}
+            locked_observing = frozenset(
+                s for s in range(first_free) if prev_plan.assignments[s].kind is SlotKind.OBSERVE
+            )
             previous = {
                 s: prev_plan.assignments[s].target_id for s in range(first_free, grid.n_slots)
             }
@@ -123,8 +128,9 @@ def main() -> None:
             geo,
             provider,
             AsOf.at(t),
-            locked=locked,  # type: ignore[arg-type]
-            previous_plan=previous,  # type: ignore[arg-type]
+            locked=locked,
+            locked_observing=locked_observing,
+            previous_plan=previous,
             first_free_slot=first_free,
         )
         plan = build_and_solve(inp, AsOf.at(t), DET, ledger)
