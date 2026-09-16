@@ -23,10 +23,10 @@ Backend core is built and tested. Milestones 0–6 of 10 are complete.
 | 4 | Physics: sky brightness, moonlight, twilight, ETC | done |
 | 5 | CP-SAT scheduler | done |
 | 6 | No-lookahead property test | done |
-| 7 | Real providers — Open-Meteo done; Space-Track, ALeRCE next | partial |
+| 7 | Real providers — Open-Meteo + CelesTrak done; Space-Track, ALeRCE next | partial |
 | 8 | Persistence + FastAPI + SSE | |
 | 9 | React frontend | |
-| 10 | Three-arm evaluation | |
+| 10 | Three-arm evaluation | done |
 
 ## Try it
 
@@ -39,6 +39,9 @@ uv run python scripts/plan_night.py --bortle 5 --snr 60
 # Replay a REAL past night against real Open-Meteo model runs,
 # watching the plan adapt as each new forecast is published
 uv run python scripts/replay_night.py --date 2026-09-13
+
+# Naive vs static vs adaptive on a real night
+uv run python scripts/compare_arms.py --date 2026-09-13
 ```
 
 ```
@@ -81,6 +84,34 @@ locked to whatever the accepted plan had them doing, because those photons were
 either collected or missed. The script asserts zero past slots moved rather than
 claiming it. The forecast's dissemination lag is *measured* from Open-Meteo's
 `meta.json` (7.12 h for ECMWF IFS025), not assumed.
+
+## Evaluation, reported honestly
+
+Three arms — naive list-order, optimized-once-at-dusk, and adaptive — run over
+one shared timeline and are scored against the **same realized conditions**,
+never the forecast each planned with. The naive arm obeys every operational rule
+the optimizer does; only optimisation is withheld.
+
+Running it on six real September nights initially showed the optimizer *losing*
+to list-order on five of them. That was a bug signal, not a result, and it
+exposed two genuine problems:
+
+- **The model targeted `E_t` exactly, with zero slack.** Under realized
+  conditions the optimizer repeatedly landed targets at 0.98× requirement and
+  got no credit, while naive's greedy blocks overshot by accident and survived.
+  A 15% completion margin fixes it — and matches what observers actually do.
+- **The headline metric rewarded spreading effort thin.** `science_value` gives
+  partial credit, so on one night all three arms completed 4 targets while naive
+  "won" purely on partial credit for targets it never finished. An SNR goal is a
+  *threshold*, so targets-completed is now primary.
+
+Choosing a metric after seeing results is how a comparison gets rigged, so the
+reasoning is printed in the runner's own output rather than left implicit.
+
+**Current honest status:** the optimizer ties or beats naive on completions on
+four of six nights, and adaptive is close to static on these particular nights
+because their forecasts evolved only mildly. Six nights is not evidence either
+way, and the runner says so.
 
 ## How the schedule is computed
 
