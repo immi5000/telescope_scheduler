@@ -1,0 +1,42 @@
+# --- secrets ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+htmlcov/
+coverage.xml
+
+# --- data / caches (regenerable; never commit) ------------------------------
+data/
+*.db
+*.db-wal
+*.db-shm
+*.npz
+*.parquet
+# ...but test fixtures ARE source code and must be committed
+!tests/fixtures/**
+
+# --- frontend --------------------------------------------------------------
+node_modules/
+dist/
+build/
+.vite/
+.next/
+
+# --- editors / os ----------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp
+.ipynb_checkpoints/
