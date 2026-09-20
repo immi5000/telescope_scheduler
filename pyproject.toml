@@ -11,15 +11,18 @@ dependencies = [
     "httpx>=0.27",
     "tenacity>=9.0",
     "structlog>=24.4",
+    # The HTTP layer is a runtime dependency of the DEPLOYMENT, not just of the
+    # optional `api` extra: Vercel installs [project] dependencies and nothing
+    # else, so a framework left in the extra produces a function that imports
+    # nothing and 500s on every request. The extra keeps uvicorn, which only a
+    # local server needs.
+    "fastapi>=0.115",
+    "pydantic>=2.9",
 ]
 
 [project.optional-dependencies]
 api = [
-    "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
-    "sse-starlette>=2.1",
-    "pydantic>=2.9",
-    "pydantic-settings>=2.5",
 ]
 
 [dependency-groups]

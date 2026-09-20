@@ -7,7 +7,7 @@
     "api/index.py": {
       "maxDuration": 60,
       "includeFiles": "src/**",
-      "excludeFiles": "{**/tests/**,**/*.pyi}"
+      "excludeFiles": "{**/tests/**,**/*.pyi,**/*.c,**/*.h,**/*.pyx,**/*.pxd,**/__pycache__/**}"
     }
   },
   "rewrites": [
