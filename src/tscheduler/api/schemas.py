@@ -1169,3 +1169,43 @@ class HealthOut(Api):
     version: str
     sessions: int
     settings: dict[str, str | bool | int | float]
+
+
+# --------------------------------------------------------------------------
+# the whole night, in one response
+# --------------------------------------------------------------------------
+
+
+class DecisionPlanOut(Api):
+    """One decision point with everything that depends on it.
+
+    ``plan`` and ``grid`` are exactly what ``/plan?as_of=`` and ``/grid?as_of=``
+    answer for this point's instant. They are carried together because the
+    client can no longer ask for one later: there is no session on the server
+    to ask about.
+    """
+
+    index: int
+    at: datetime
+    plan: PlanOut
+    grid: QualityGridOut
+
+
+class FullNightOut(Api):
+    """A folded night, complete, with nothing left on the server.
+
+    There is no session id here, and its absence is the point: an id is a
+    handle on state, and no state was kept. Everything the UI can ask about
+    this night is in this object, so a scrub is a lookup in ``decisions``
+    rather than a request, and a refresh is this same POST sent again.
+
+    ``session.decisionPoints`` and ``decisions`` are the same points in the
+    same order -- the first carries the timeline the slider snaps to, the
+    second the plans those instants resolve to.
+    """
+
+    session: SessionOut
+    geometry: GeometryOut
+    sky: SkyOut
+    satellites: SatellitesOut
+    decisions: list[DecisionPlanOut]

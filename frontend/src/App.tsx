@@ -20,7 +20,7 @@
  */
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError, api, type Session, type SessionRequest } from './api/client'
+import { ApiError, type SessionRequest } from './api/client'
 import { CATEGORY, changed, decisionCategory } from './alerts/model'
 import { useAlertToasts, useAlerts } from './alerts/useAlerts'
 import { BottomBar } from './components/BottomBar'
@@ -44,7 +44,7 @@ import { DEFAULT_OPTIONS, type SkyOptions } from './sky/layers'
 import { sameSelection, type SkySelection } from './sky/layers'
 import type { SkyApi } from './sky/SkyScene'
 import {
-  useEventStream,
+  useCreateNight,
   useGeometry,
   useGrid,
   usePlan,
@@ -134,8 +134,6 @@ export default function App() {
   const catalog = useCatalog()
   const { add: addTarget, busy: adding } = useAddTarget(sessionId)
 
-  useEventStream()
-
   // The cursor's clock is the session's grid. Setting it also places the
   // cursor: at dusk for a night that is over, on the present -- following it --
   // for one that is still happening. Re-delivering the same grid (every live
@@ -155,13 +153,14 @@ export default function App() {
     if (typeof WebGL2RenderingContext === 'undefined') setSkyLost(true)
   }, [])
 
+  const createNight = useCreateNight()
   const create = useCallback(
     async (req: SessionRequest) => {
       setCreating(true)
       setCreateError(null)
       try {
-        const created: Session = await api.create(req)
-        setSessionId(created.id)
+        const night = await createNight.mutateAsync(req)
+        setSessionId(night.session.id)
         setSelected(null)
         setSkySelection(null)
       } catch (err) {
@@ -170,7 +169,7 @@ export default function App() {
         setCreating(false)
       }
     },
-    [],
+    [createNight],
   )
 
   // -- alerts: popped as the cursor reaches them, marked on the nightbar ------

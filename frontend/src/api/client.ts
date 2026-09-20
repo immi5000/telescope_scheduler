@@ -49,6 +49,9 @@ export type Planet = Schemas["PlanetOut"];
 export type Satellites = Schemas["SatellitesOut"];
 export type SatellitePass = Schemas["SatellitePassOut"];
 export type Live = Schemas["LiveOut"];
+/** A whole night in one payload -- see `POST /api/night`. */
+export type FullNight = Schemas["FullNightOut"];
+export type DecisionPlan = Schemas["DecisionPlanOut"];
 
 export class ApiError extends Error {
   constructor(
@@ -88,6 +91,19 @@ async function detail(res: Response): Promise<string> {
 
 export const api = {
   health: () => get<Health>("/api/health"),
+
+  /**
+   * Fold a night and get all of it at once.
+   *
+   * The stateless replacement for `create` plus the five per-session GETs
+   * below. It blocks for the length of the fold -- three to seven seconds --
+   * and answers with every plan, grid, geometry row and satellite pass the
+   * night will ever have, because the server keeps none of it to be asked
+   * for later. Sending the same body again re-folds against current data,
+   * which is what "refresh" now means.
+   */
+  night: (body: SessionRequest, signal?: AbortSignal) =>
+    post<FullNight>("/api/night", body, signal),
   presets: () => get<Presets>("/api/presets"),
   sessions: () => get<SessionListItem[]>("/api/sessions"),
   session: (id: string) => get<Session>(`/api/sessions/${id}`),

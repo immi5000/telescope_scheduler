@@ -114,6 +114,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/night": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Night
+         * @description Fold a night and return all of it, keeping nothing.
+         *
+         *     The stateless twin of ``POST /api/sessions`` and the five GETs that
+         *     follow it -- and the only one of the two that can work where the next
+         *     request reaches a different process with an empty store. What it gives
+         *     up to do that is set out in ``api/oneshot.py``.
+         *
+         *     Blocks for the length of the fold (3-7 s), in a worker thread. CP-SAT
+         *     holds the interpreter for whole seconds, and folding on the event loop
+         *     would stall every concurrent request behind this one.
+         */
+        post: operations["create_night_api_night_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/night-window": {
         parameters: {
             query?: never;
@@ -701,6 +730,26 @@ export interface components {
             /** Pastslotsrewritten */
             pastSlotsRewritten: number;
         };
+        /**
+         * DecisionPlanOut
+         * @description One decision point with everything that depends on it.
+         *
+         *     ``plan`` and ``grid`` are exactly what ``/plan?as_of=`` and ``/grid?as_of=``
+         *     answer for this point's instant. They are carried together because the
+         *     client can no longer ask for one later: there is no session on the server
+         *     to ask about.
+         */
+        DecisionPlanOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            grid: components["schemas"]["QualityGridOut"];
+            /** Index */
+            index: number;
+            plan: components["schemas"]["PlanOut"];
+        };
         /** DecisionPointOut */
         DecisionPointOut: {
             /** Addedtargets */
@@ -867,6 +916,27 @@ export interface components {
             records: number;
             /** Sources */
             sources: string[];
+        };
+        /**
+         * FullNightOut
+         * @description A folded night, complete, with nothing left on the server.
+         *
+         *     There is no session id here, and its absence is the point: an id is a
+         *     handle on state, and no state was kept. Everything the UI can ask about
+         *     this night is in this object, so a scrub is a lookup in ``decisions``
+         *     rather than a request, and a refresh is this same POST sent again.
+         *
+         *     ``session.decisionPoints`` and ``decisions`` are the same points in the
+         *     same order -- the first carries the timeline the slider snaps to, the
+         *     second the plans those instants resolve to.
+         */
+        FullNightOut: {
+            /** Decisions */
+            decisions: components["schemas"]["DecisionPlanOut"][];
+            geometry: components["schemas"]["GeometryOut"];
+            satellites: components["schemas"]["SatellitesOut"];
+            session: components["schemas"]["SessionOut"];
+            sky: components["schemas"]["SkyOut"];
         };
         /**
          * GeometryOut
@@ -2127,6 +2197,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthOut"];
+                };
+            };
+        };
+    };
+    create_night_api_night_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FullNightOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

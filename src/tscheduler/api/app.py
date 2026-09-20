@@ -51,6 +51,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES
 
 from tscheduler import __version__, catalog
@@ -61,6 +62,7 @@ from tscheduler.api import (
     live,
     mappers,
     nightwindow,
+    oneshot,
     presets,
     schemas,
     skyview,
@@ -385,6 +387,22 @@ def create_app(
             raise HTTPException(UNPROCESSABLE, str(exc)) from exc
         except NotImplementedError as exc:
             raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, str(exc)) from exc
+
+    @app.post("/api/night", response_model=schemas.FullNightOut, tags=["night"])
+    async def create_night(req: schemas.SessionRequest) -> schemas.FullNightOut:
+        """Fold a night and return all of it, keeping nothing.
+
+        The stateless twin of ``POST /api/sessions`` and the five GETs that
+        follow it -- and the only one of the two that can work where the next
+        request reaches a different process with an empty store. What it gives
+        up to do that is set out in ``api/oneshot.py``.
+
+        Blocks for the length of the fold (3-7 s), in a worker thread. CP-SAT
+        holds the interpreter for whole seconds, and folding on the event loop
+        would stall every concurrent request behind this one.
+        """
+        sess = _build_session(req, cfg)
+        return await run_in_threadpool(oneshot.fold_full_night, sess, elements)
 
     @app.post(
         "/api/sessions",

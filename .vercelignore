@@ -1,0 +1,24 @@
+# The upload is the deployment: anything here that is not needed at build or
+# run time is bundle budget spent for nothing, and the function has to fit in
+# 250 MB uncompressed with ortools and astropy already in it.
+.venv/
+.git/
+.hypothesis/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.playwright-mcp/
+__pycache__/
+*.pyc
+
+# Rebuilt by the build command; uploading them races the fresh copy.
+frontend/node_modules/
+frontend/dist/
+
+# Written at runtime, into /tmp, never from here.
+data/cache/
+
+tests/
+docs/
+scripts/
+uv.lock

@@ -1,173 +1,185 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
-import { ApiError, api, type DecisionPoint } from "./api/client";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useCallback } from "react";
+import {
+  api,
+  type DecisionPoint,
+  type FullNight,
+  type SessionRequest,
+} from "./api/client";
+
+/**
+ * Every hook below reads one cache entry.
+ *
+ * The server used to hold a folded night and answer questions about it:
+ * `/plan?as_of=`, `/grid?as_of=`, `/geometry`, `/sky`, `/satellites`. It holds
+ * nothing now -- a serverless instance forgets between requests -- so the
+ * night arrives complete from a single `POST /api/night` and lives here
+ * instead, under `["night", id]`.
+ *
+ * The hooks kept their old names and signatures, and that is the point: what
+ * changed is where the answer comes from, not what any component asks for. Six
+ * `useQuery` calls share the one key and differ only in `select`, which React
+ * Query dedupes into a single entry, so a scrub that used to cost a request
+ * per decision point now costs a property lookup.
+ */
+
+/**
+ * The request each night was folded from, so it can be folded again.
+ *
+ * Module-scoped rather than in the query cache because it is an input, not an
+ * answer. A reload empties it, which is correct: a reload also empties the
+ * night it would refetch, and neither outlives the tab -- nothing about this
+ * night is durable anywhere, by design.
+ */
+const REQUESTS = new Map<string, SessionRequest>();
+
+export const nightKey = (id: string | null) => ["night", id] as const;
+
+/**
+ * Stamp a folded night with the id it is cached under.
+ *
+ * Every fold mints a fresh server-side id, including a re-fold of a night
+ * already on screen. The id a component holds must not change underneath it
+ * for that, so the cache key wins and the payload is made to agree with it.
+ * The id names "the night being looked at", which is a fact about this tab;
+ * it stopped naming anything on the server the moment the server stopped
+ * keeping one.
+ */
+function withId(night: FullNight, id: string): FullNight {
+  if (night.session.id === id) return night;
+  return { ...night, session: { ...night.session, id } };
+}
+
+/** The request a night was folded from, if this tab still holds it. */
+export function nightRequest(id: string | null): SessionRequest | undefined {
+  return id ? REQUESTS.get(id) : undefined;
+}
+
+/** Install a re-folded night in place, under the id it is already known by. */
+export function applyNight(
+  qc: QueryClient,
+  id: string,
+  req: SessionRequest,
+  night: FullNight,
+): void {
+  REQUESTS.set(id, req);
+  qc.setQueryData(nightKey(id), withId(night, id));
+}
+
+/**
+ * The cached night. Refetching it re-folds against current data.
+ *
+ * `staleTime: Infinity` because a fold is expensive and never spontaneously
+ * wrong -- every plan in it is stamped with the instant it was built at. It is
+ * refetched only when something asks, which is what `useRefreshNight` is.
+ */
+function useNightQuery<T>(id: string | null, select: (n: FullNight) => T, enabled = true) {
+  return useQuery({
+    queryKey: nightKey(id),
+    queryFn: () => api.night(REQUESTS.get(id!)!).then((n) => withId(n, id!)),
+    enabled: !!id && enabled && REQUESTS.has(id ?? ""),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    select,
+  });
+}
 
 export function usePresets() {
   return useQuery({ queryKey: ["presets"], queryFn: api.presets, staleTime: Infinity });
 }
 
-export function useSession(id: string | null) {
-  return useQuery({
-    queryKey: ["session", id],
-    queryFn: () => api.session(id!),
-    enabled: !!id,
-    // While the fold runs, poll. The SSE stream also invalidates, but a poll
-    // means the page still works with the stream blocked by a proxy -- which
-    // is the documented fallback, so it had better actually be in place. A
-    // live night keeps a slow poll for the same reason: its updates arrive
-    // over the stream, and a blocked stream must not freeze the night.
-    refetchInterval: (q) =>
-      q.state.data?.status === "building" ? 700 : q.state.data?.live?.following ? 60_000 : false,
+/**
+ * Fold a night.
+ *
+ * Resolves to the night's id once the whole payload is in cache, so a caller
+ * that sets `sessionId` from it can never render a frame where the id exists
+ * and the night does not. The id is the server's own -- it still names the
+ * session it built, it simply no longer has anywhere to look it up.
+ */
+export function useCreateNight() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: SessionRequest) => {
+      const night = await api.night(req);
+      const id = night.session.id;
+      REQUESTS.set(id, req);
+      qc.setQueryData(nightKey(id), night);
+      return night;
+    },
   });
+}
+
+/**
+ * Re-fold this night against whatever the forecast says now.
+ *
+ * What is left of the live edge. The server used to watch a night that had not
+ * ended and append a decision point when a new model run landed; nothing can
+ * watch anything here, so the question is asked on demand instead. The answer
+ * is the same either way -- each plan is still built at its own `as_of`, and
+ * the past is still locked -- only the asking moved to the client.
+ */
+export function useRefreshNight(id: string | null) {
+  const qc = useQueryClient();
+  return useCallback(async () => {
+    if (!id || !REQUESTS.has(id)) return;
+    await qc.refetchQueries({ queryKey: nightKey(id), exact: true });
+  }, [qc, id]);
+}
+
+export function useSession(id: string | null) {
+  return useNightQuery(id, (n) => n.session);
 }
 
 /**
  * The plan in force at the cursor.
  *
- * Keyed on the decision INDEX, not the cursor. Dragging within one decision
- * interval therefore hits the same cache entry and issues no request: the
- * server already told us, via validFrom/validUntil, that the answer cannot
- * change until the next decision point.
+ * `points` and `revision` are still taken so call sites did not have to
+ * change, but the index is all that is read: every plan is already here, so
+ * there is no instant to send and no cache interval to respect.
  */
 export function usePlan(
   id: string | null,
-  points: DecisionPoint[],
+  _points: DecisionPoint[],
   index: number,
-  revision = 0,
+  _revision = 0,
 ) {
-  const at = points[Math.min(index, points.length - 1)]?.at;
-  const query = useQuery({
-    // points.length is part of the key on purpose. A plan fetched while the
-    // fold is still running reports the decision count KNOWN AT THAT MOMENT,
-    // and its validUntil runs to the end of the night because no later point
-    // exists yet. With staleTime: Infinity and no count in the key, that first
-    // answer would be cached forever and the panel would sit on "decision 1 of
-    // 1" for a night that has four. Observed, not hypothetical.
-    //
-    // `revision` is the live watch's counter. Before dusk a new forecast
-    // re-makes the opening plan IN PLACE -- same index, same count, different
-    // plan -- and only this tells the cache.
-    queryKey: ["plan", id, index, points.length, revision],
-    queryFn: () => api.plan(id!, at!),
-    enabled: !!id && !!at,
-    staleTime: Infinity,
-    placeholderData: (prev) => prev,
-  });
+  const query = useNightQuery(id, (n) => n.decisions[clamp(index, n.decisions.length)]?.plan);
   return { ...query, decisionIndex: index };
-}
-
-/**
- * The night's geometry. One fetch per session, then never again.
- *
- * No `asOf` in the key because there is none in the request: this is the
- * as_of-INDEPENDENT half of the wire, and keying it on the cursor would
- * reintroduce exactly the refetch-per-scrub the split removed.
- */
-export function useGeometry(id: string | null, ready: boolean) {
-  return useQuery({
-    queryKey: ["geometry", id],
-    queryFn: () => api.geometry(id!),
-    enabled: !!id && ready,
-    staleTime: Infinity,
-    gcTime: Infinity,
-    retry: (count, err) =>
-      // 425 means the fold has not produced geometry yet, which is a matter of
-      // waiting rather than an error. Anything else is worth failing fast on.
-      err instanceof ApiError && err.status === 425 ? count < 30 : count < 2,
-    retryDelay: 500,
-  });
-}
-
-/**
- * Planets and sky darkness. Immutable for the session, like the geometry.
- */
-export function useSky(id: string | null, ready: boolean) {
-  return useQuery({
-    queryKey: ["sky", id],
-    queryFn: () => api.sky(id!),
-    enabled: !!id && ready,
-    staleTime: Infinity,
-    gcTime: Infinity,
-    retry: (count, err) =>
-      err instanceof ApiError && err.status === 425 ? count < 30 : count < 2,
-    retryDelay: 500,
-  });
-}
-
-/**
- * Satellite passes. The key and options are shared with the alerts module,
- * which reads the same payload -- keep them identical or it fetches twice.
- */
-export function useSatellites(id: string | null) {
-  return useQuery({
-    queryKey: ["satellites", id],
-    queryFn: () => api.satellites(id!),
-    enabled: !!id,
-    staleTime: Infinity,
-    gcTime: Infinity,
-    retry: false,
-  });
 }
 
 export function useGrid(
   id: string | null,
-  points: DecisionPoint[],
+  _points: DecisionPoint[],
   index: number,
-  revision = 0,
+  _revision = 0,
 ) {
-  const at = points[Math.min(index, points.length - 1)]?.at;
-  return useQuery({
-    queryKey: ["grid", id, index, points.length, revision],
-    queryFn: () => api.grid(id!, at!),
-    enabled: !!id && !!at,
-    staleTime: Infinity,
-    placeholderData: (prev) => prev,
-  });
+  return useNightQuery(id, (n) => n.decisions[clamp(index, n.decisions.length)]?.grid);
 }
 
-export interface StreamEvent {
-  type: string;
-  sessionId?: string;
-  progress?: number;
-  message?: string;
+/** The night's geometry. As_of-independent, as it always was. */
+export function useGeometry(id: string | null, ready = true) {
+  return useNightQuery(id, (n) => n.geometry, ready);
+}
+
+/** Planets and sky darkness. */
+export function useSky(id: string | null, ready = true) {
+  return useNightQuery(id, (n) => n.sky, ready);
 }
 
 /**
- * Server-sent notifications.
- *
- * The handler does exactly one thing: invalidate. No event carries plan data,
- * so there is a single fetching path shared with replay, and this whole hook
- * could be replaced by a 15-second poll without touching a component.
+ * Satellite passes. Shares the night's cache entry with everything else, so
+ * the alerts module reading this alongside the sky view costs no second fetch.
  */
-export function useEventStream(onEvent?: (e: StreamEvent) => void) {
-  const qc = useQueryClient();
-  useEffect(() => {
-    const es = new EventSource("/api/events");
-    const handle = (raw: MessageEvent<string>) => {
-      let data: StreamEvent;
-      try {
-        data = JSON.parse(raw.data) as StreamEvent;
-      } catch {
-        return;
-      }
-      if (data.sessionId) {
-        void qc.invalidateQueries({ queryKey: ["session", data.sessionId] });
-      }
-      onEvent?.(data);
-    };
-    for (const kind of [
-      "session.progress",
-      "plan.available",
-      "session.ready",
-      "session.failed",
-      // A live night's watch finished a check: new data or not, its status moved.
-      "session.live",
-    ]) {
-      es.addEventListener(kind, handle as EventListener);
-    }
-    return () => es.close();
-    // onEvent is intentionally not a dependency: re-subscribing on every render
-    // would tear down and rebuild the stream continuously.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qc]);
+export function useSatellites(id: string | null) {
+  return useNightQuery(id, (n) => n.satellites);
+}
+
+function clamp(index: number, length: number): number {
+  if (length === 0) return 0;
+  return Math.max(0, Math.min(index, length - 1));
 }

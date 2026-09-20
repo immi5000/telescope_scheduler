@@ -95,6 +95,63 @@ uv run python -m tscheduler.api
 cd frontend && npm install && npm run dev     # http://localhost:5173
 ```
 
+## Deploy to Vercel
+
+One project serves both halves: the built SPA from the CDN, and the API as a
+Python function at `api/index.py`. `vercel.json` sends `/api/*` to the
+function and everything else to the static build.
+
+```bash
+vercel login          # interactive: opens a browser
+vercel link           # once, to create or attach the project
+vercel                # preview deployment
+vercel --prod         # production
+```
+
+### What the deployed app does differently
+
+A serverless instance forgets the night between requests, so the deployed API
+never keeps one. `POST /api/night` folds the whole night and answers with all
+of it at once -- every plan, grid, geometry row and satellite pass, about
+250 KB gzipped -- and the browser scrubs against its own copy. The reasoning,
+and what it costs, is in `src/tscheduler/api/oneshot.py`.
+
+| | Run locally | Deployed |
+|---|---|---|
+| Fresh weather and satellite data | yes | yes, unchanged |
+| Waiting for a fold | progress over SSE | one 3-7 s request |
+| A night re-planning itself overnight | every 15 min until dawn | on "Re-plan now" |
+
+The last row is the real loss. `api/live.py` exists to stop a night folded at
+dusk being presented as though it were what 04:00 looked like, and it does
+that by checking for a new forecast run every few minutes until dawn. Nothing
+can hold a night open here, so the check became a button. The guarantee it
+protects is intact either way: every plan is built at its own `as_of`, and
+the past is locked at each one.
+
+The stateful endpoints (`POST /api/sessions` and the per-session GETs) are
+still here and still work when you run the server yourself. The deployed
+frontend does not call them, and on Vercel they answer 404 for every session
+id -- which is the truth.
+
+### Environment
+
+`api/index.py` points the cache at `/tmp`, the only writable path on the
+platform, so nothing is required to deploy. Set `TSCHED_SPACETRACK_USER` and
+`TSCHED_SPACETRACK_PASS` in the project's environment for the historical
+orbital elements replay mode uses.
+
+### Size
+
+The function bundles ortools, numpy, astropy and pandas: roughly 200 MB
+against a 250 MB limit, so `requirements.txt` is pinned -- a minor release is
+free to move that by tens of megabytes. If a build ever fails on size, the
+lever is `src/tscheduler/scheduling/cpsat.py`. It is the only importer of
+ortools (pandas comes in behind it, ~115 MB for the pair), and `naive.py`
+honours the same constraints without it -- at the cost of the optimisation
+this project exists to measure.
+
+
 **Plan a night** asks for three things, and not for the weather:
 
 - **Where and when.** A site and a night. "Night of" defaults to the night the

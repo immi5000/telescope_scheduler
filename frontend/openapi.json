@@ -616,6 +616,34 @@
         "title": "ChangesOut",
         "type": "object"
       },
+      "DecisionPlanOut": {
+        "description": "One decision point with everything that depends on it.\n\n``plan`` and ``grid`` are exactly what ``/plan?as_of=`` and ``/grid?as_of=``\nanswer for this point's instant. They are carried together because the\nclient can no longer ask for one later: there is no session on the server\nto ask about.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "grid": {
+            "$ref": "#/components/schemas/QualityGridOut"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanOut"
+          }
+        },
+        "required": [
+          "index",
+          "at",
+          "plan",
+          "grid"
+        ],
+        "title": "DecisionPlanOut",
+        "type": "object"
+      },
       "DecisionPointOut": {
         "properties": {
           "addedTargets": {
@@ -1050,6 +1078,39 @@
           "hasOracle"
         ],
         "title": "EvidenceOut",
+        "type": "object"
+      },
+      "FullNightOut": {
+        "description": "A folded night, complete, with nothing left on the server.\n\nThere is no session id here, and its absence is the point: an id is a\nhandle on state, and no state was kept. Everything the UI can ask about\nthis night is in this object, so a scrub is a lookup in ``decisions``\nrather than a request, and a refresh is this same POST sent again.\n\n``session.decisionPoints`` and ``decisions`` are the same points in the\nsame order -- the first carries the timeline the slider snaps to, the\nsecond the plans those instants resolve to.",
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionPlanOut"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/GeometryOut"
+          },
+          "satellites": {
+            "$ref": "#/components/schemas/SatellitesOut"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionOut"
+          },
+          "sky": {
+            "$ref": "#/components/schemas/SkyOut"
+          }
+        },
+        "required": [
+          "session",
+          "geometry",
+          "sky",
+          "satellites",
+          "decisions"
+        ],
+        "title": "FullNightOut",
         "type": "object"
       },
       "GeometryOut": {
@@ -4190,6 +4251,48 @@
         "summary": "Health",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/night": {
+      "post": {
+        "description": "Fold a night and return all of it, keeping nothing.\n\nThe stateless twin of ``POST /api/sessions`` and the five GETs that\nfollow it -- and the only one of the two that can work where the next\nrequest reaches a different process with an empty store. What it gives\nup to do that is set out in ``api/oneshot.py``.\n\nBlocks for the length of the fold (3-7 s), in a worker thread. CP-SAT\nholds the interpreter for whole seconds, and folding on the event loop\nwould stall every concurrent request behind this one.",
+        "operationId": "create_night_api_night_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FullNightOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Night",
+        "tags": [
+          "night"
         ]
       }
     },

@@ -6,9 +6,9 @@
  * seeks there.
  */
 
-import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { ApiError, api, type Session } from '../../api/client'
+import { ApiError, type Session } from '../../api/client'
+import { useRefreshNight } from '../../hooks'
 import { AlertIcon } from '../../alerts/AlertViews'
 import { changeSummary, changed, decisionCategory, targetNames } from '../../alerts/model'
 import { More, Panel } from '../Panel'
@@ -30,7 +30,7 @@ export function Activity({
       title="Activity"
       right={<span className="chip">{session.decisionPoints.length}</span>}
     >
-      {session.live && <LiveWatch session={session} live={session.live} />}
+      <Replan session={session} />
       <div className="log">
         {points.map((dp) => {
           const moved = changed(dp)
@@ -73,24 +73,35 @@ export function Activity({
   )
 }
 
-const hhmm = (iso: string | null | undefined): string => (iso ? iso.slice(11, 16) : '—')
-
 /**
  * The server's watch over a night that is still happening, stated so it can
  * be checked rather than trusted: when it last asked for new data, when it
  * asks next, and what it found. "Check now" asks immediately.
  */
-function LiveWatch({ session, live }: { session: Session; live: NonNullable<Session['live']> }) {
-  const qc = useQueryClient()
+/**
+ * Re-folding the night, and the plain statement that nothing else will.
+ *
+ * The server used to watch a night that had not ended and append a decision
+ * point when a new forecast run landed. A host that forgets the night between
+ * requests has nothing to watch it with, so no watch exists.
+ *
+ * Two things follow, and both are said rather than implied. The panel does
+ * not claim to be watching, because it is not. And the control stays put
+ * instead of disappearing with the watch that used to own it -- re-planning
+ * is now the ONLY way to get current data into this night, which is a reason
+ * to make it reachable, not a reason to hide it.
+ */
+function Replan({ session }: { session: Session }) {
+  const refresh = useRefreshNight(session.id)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
 
-  const check = async () => {
+  const replan = async () => {
     setBusy(true)
     setNote(null)
     try {
-      const next = await api.refresh(session.id)
-      qc.setQueryData(['session', session.id], next)
+      await refresh()
+      setNote(`Re-planned at ${new Date().toISOString().slice(11, 16)} against the current forecast.`)
     } catch (err) {
       setNote(err instanceof ApiError ? err.message : String(err))
     } finally {
@@ -98,36 +109,26 @@ function LiveWatch({ session, live }: { session: Session; live: NonNullable<Sess
     }
   }
 
-  const headline = live.following
-    ? `Watching · checked ${hhmm(live.lastCheckedAt)}${
-        live.nextCheckAt ? ` · next ${hhmm(live.nextCheckAt)}` : ''
-      }`
-    : `Night over · ${live.updates} live update${live.updates === 1 ? '' : 's'}`
-
   return (
     <>
-      <div className={`livewatch${live.lastError ? ' livewatch--error' : ''}`}>
-        {live.following && <span className="live-dot" aria-hidden />}
-        <span className="num">{headline}</span>
-        {live.following && (
-          <button
-            type="button"
-            className="livewatch__check"
-            disabled={busy}
-            onClick={() => void check()}
-          >
-            {busy ? 'Checking…' : 'Check now'}
-          </button>
-        )}
+      <div className="livewatch">
+        <span className="num">Not watched · re-plan to pick up new data</span>
+        <button
+          type="button"
+          className="livewatch__check"
+          disabled={busy}
+          onClick={() => void replan()}
+        >
+          {busy ? 'Re-planning…' : 'Re-plan now'}
+        </button>
       </div>
-      <More label={live.lastError ? 'Last check failed' : 'Last check'}>
-        <div>{live.lastResult}</div>
-        {live.lastError && <div className="faint">{live.lastError}</div>}
-        {note && <div className="faint">{note}</div>}
-        <div className="faint">
-          {live.checks} check{live.checks === 1 ? '' : 's'}, {live.updates} brought new data
-          {live.everyMinutes ? ` · every ${live.everyMinutes} min` : ' · scheduled checks off'}
+      <More label="Why this is manual">
+        <div>
+          Nothing is folding this night in the background. Each plan was built
+          from the forecast as it stood when the night was folded; re-planning
+          folds it again against whatever the forecast says now.
         </div>
+        {note && <div className="faint">{note}</div>}
       </More>
     </>
   )
