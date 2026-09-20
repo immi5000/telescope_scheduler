@@ -1,2 +1,13 @@
 node_modules/
-dist/
+
+# dist/ is NOT ignored, and that is deliberate.
+#
+# The deployment cannot build it. Setting `outputDirectory` in vercel.json --
+# which Vercel requires whenever `buildCommand` is set -- puts the Python
+# function on a code path that measures 526 MB against a 500 MB ceiling,
+# while the same deployment without it measures 291 MB and ships. So the SPA
+# is built here, committed, and served by the API process (see
+# `src/tscheduler/api/asgi.py`).
+#
+# Practical consequence: run `npm run build` and commit the result before
+# deploying, or the deployed UI is the last one someone remembered to build.

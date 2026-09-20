@@ -43,7 +43,10 @@ build/
 
 # frontend
 frontend/node_modules/
-frontend/dist/
+# The built SPA is committed: the deployment serves it from the API
+# process and cannot rebuild it (outputDirectory pushes the Python
+# function past its size ceiling). See frontend/.gitignore.
+!frontend/dist/
 .playwright-mcp/
 .vercel
 .env*

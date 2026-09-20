@@ -11,9 +11,9 @@
 __pycache__/
 *.pyc
 
-# Rebuilt by the build command; uploading them races the fresh copy.
+# node_modules is ~235 MB and Vercel counts it toward the FUNCTION bundle,
+# which is the whole reason the frontend is built locally and uploaded.
 frontend/node_modules/
-frontend/dist/
 
 # Written at runtime, into /tmp, never from here.
 data/cache/

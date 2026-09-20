@@ -1,0 +1,15 @@
+.venv/
+.git/
+.vercel/
+.hypothesis/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.playwright-mcp/
+__pycache__/
+*.pyc
+frontend/node_modules/
+frontend/dist/
+data/cache/
+tests/
+docs/
