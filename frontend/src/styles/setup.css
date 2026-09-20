@@ -290,3 +290,11 @@
 .setup .setup__why--bad {
   color: var(--warn);
 }
+
+/* The fold bar replaces the reason line while the fold runs, and stretches:
+   `.setup__go` justifies its items to the right, which would otherwise shrink
+   a full-width meter to the width of its own text. */
+.setup .foldbar {
+  justify-self: stretch;
+  min-width: 260px;
+}

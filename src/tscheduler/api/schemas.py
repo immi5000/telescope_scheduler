@@ -1118,6 +1118,20 @@ class AddTargetRequest(Api):
     )
 
 
+class NightStreamRequest(SessionRequest):
+    """A night to fold, and optionally one object to add once it is folded.
+
+    Exactly the body ``POST /api/night`` takes, plus ``add``. ``targets`` is
+    the night as it stands -- WITHOUT the object being added -- because the
+    object joins through an amendment rather than through the fold, and that
+    is what confines it to the time still ahead of ``add.at``. Sending it in
+    ``targets`` instead asks for a different thing: a night planned from dusk
+    as though the object had been there all along.
+    """
+
+    add: AddTargetRequest | None = None
+
+
 class AmendOut(Api):
     """What adding the object did.
 
@@ -1209,3 +1223,36 @@ class FullNightOut(Api):
     sky: SkyOut
     satellites: SatellitesOut
     decisions: list[DecisionPlanOut]
+    amend: AmendOut | None = None
+    """Set only when this fold was asked to ADD an object -- what the add did,
+    and where the amended plan gives it time. Null for an ordinary fold."""
+
+
+class NightFrameOut(Api):
+    """One line of ``POST /api/night/stream``.
+
+    That endpoint answers in NDJSON -- one of these per line, newline
+    terminated -- rather than as a single JSON body, because the fold takes
+    seconds and the only honest way to show a percentage is to send it while
+    the work is happening. The response is declared here as the FRAME so the
+    generated client types describe what it will actually read; what it reads
+    is a sequence of them, not one.
+
+    ``type`` decides which of the rest are set:
+
+    ``progress``  ``fraction`` (0..1, monotone) and ``message`` (the stage)
+    ``night``     ``night`` -- the same payload ``POST /api/night`` returns
+    ``error``     ``status`` (the HTTP code this would have been) and ``detail``
+
+    An error arrives as a frame rather than as a status code because by then
+    the response has already begun: a fold that fails four seconds in cannot
+    retract the 200 its headers carried. Clients must treat an ``error`` frame
+    exactly as they would treat that status.
+    """
+
+    type: Literal["progress", "night", "error"]
+    fraction: float | None = None
+    message: str | None = None
+    night: FullNightOut | None = None
+    status: int | None = None
+    detail: str | None = None

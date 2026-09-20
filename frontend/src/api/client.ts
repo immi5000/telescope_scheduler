@@ -52,6 +52,21 @@ export type Live = Schemas["LiveOut"];
 /** A whole night in one payload -- see `POST /api/night`. */
 export type FullNight = Schemas["FullNightOut"];
 export type DecisionPlan = Schemas["DecisionPlanOut"];
+/** A night to fold, plus the object to add to it afterwards, if any. */
+export type NightStreamRequest = Schemas["NightStreamRequest"];
+export type AddTarget = Schemas["AddTargetRequest"];
+export type Amend = Schemas["AmendOut"];
+type NightFrame = Schemas["NightFrameOut"];
+
+/** One stage of a fold: how far it has got, and what it is doing. */
+export interface FoldStage {
+  /** 0..1, monotone. */
+  fraction: number;
+  /** The stage, in the server's words. */
+  message: string;
+}
+
+export type OnFoldStage = (stage: FoldStage) => void;
 
 export class ApiError extends Error {
   constructor(
@@ -89,8 +104,90 @@ async function detail(res: Response): Promise<string> {
   }
 }
 
+/**
+ * Fold a night, reading the progress it reports on the way.
+ *
+ * The response is NDJSON -- one `NightFrameOut` per line -- because a fold
+ * takes seconds and there is nowhere else for a percentage to come from: no
+ * session is kept, so there is nothing to poll. Progress and the night itself
+ * arrive over the SAME connection, which is what makes this work on a host
+ * where the next request would reach a different process.
+ *
+ * It degrades rather than breaks. A proxy that buffers the whole body delivers
+ * every frame at once at the end: the night is still correct, and only the bar
+ * loses its motion. `onStage` is therefore a hint about a wait, never the way
+ * anything is learnt.
+ *
+ * An `error` frame is raised as the `ApiError` it stands in for. The status
+ * code it carries is the one the response would have had, had the fold failed
+ * before its headers went out -- 409 for an object the night cannot fit, and
+ * it means exactly what 409 means on any other endpoint here.
+ */
+async function nightStream(
+  body: NightStreamRequest,
+  onStage?: OnFoldStage,
+  signal?: AbortSignal,
+): Promise<FullNight> {
+  const res = await fetch("/api/night/stream", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/x-ndjson",
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) throw new ApiError(res.status, await detail(res));
+
+  let night: FullNight | null = null;
+  const take = (line: string): void => {
+    const text = line.trim();
+    if (!text) return;
+    const frame = JSON.parse(text) as NightFrame;
+    if (frame.type === "progress") {
+      onStage?.({ fraction: frame.fraction ?? 0, message: frame.message ?? "" });
+    } else if (frame.type === "night" && frame.night) {
+      night = frame.night;
+    } else if (frame.type === "error") {
+      throw new ApiError(frame.status ?? 500, frame.detail ?? "the fold failed");
+    }
+  };
+
+  if (res.body) {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      // `stream: true` matters: a frame is ~900 KB and WILL be split across
+      // chunks, sometimes mid-character. Decoding each chunk independently
+      // mangles the byte that straddles the boundary.
+      if (value) buffer += decoder.decode(value, { stream: true });
+      if (done) buffer += decoder.decode();
+      let nl = buffer.indexOf("\n");
+      while (nl >= 0) {
+        take(buffer.slice(0, nl));
+        buffer = buffer.slice(nl + 1);
+        nl = buffer.indexOf("\n");
+      }
+      if (done) break;
+    }
+    take(buffer);
+  } else {
+    // No streams here (an old browser, or a test double). The body is the same
+    // lines either way, so reading it whole still yields the night.
+    for (const line of (await res.text()).split("\n")) take(line);
+  }
+
+  if (night === null) throw new ApiError(502, "the fold ended without a night");
+  return night;
+}
+
 export const api = {
   health: () => get<Health>("/api/health"),
+
+  /** {@link nightStream} -- fold a night, and report the wait while it lasts. */
+  nightStream,
 
   /**
    * Fold a night and get all of it at once.

@@ -68,6 +68,7 @@ import {
   type Tonight,
   type TonightRequest,
 } from '../api/client'
+import { FoldBar } from './FoldBar'
 import { DEFAULT_BORTLE, DEFAULT_SNR } from './setup/defaults'
 import { EquipmentEditor, defaultEquipment, type RigOrigin } from './setup/EquipmentEditor'
 import { TargetPicker } from './setup/TargetPicker'
@@ -1037,12 +1038,20 @@ export function Setup({
 
         <div className="setup__foot">
           <div className="setup__go">
-            <span
-              className={`setup__why${invalid.length ? ' setup__why--bad' : ''}`}
-              aria-live="polite"
-            >
-              {busy ? '' : invalid.length ? invalid.join(' · ') : (waiting ?? '')}
-            </span>
+            {busy ? (
+              // The fold is three to seven seconds of CP-SAT and there is no
+              // session to ask about it: the server reports each stage down
+              // the response it will deliver the night on, and this is where
+              // that lands. See `plan/foldProgress.ts`.
+              <FoldBar label="Planning the night" />
+            ) : (
+              <span
+                className={`setup__why${invalid.length ? ' setup__why--bad' : ''}`}
+                aria-live="polite"
+              >
+                {invalid.length ? invalid.join(' · ') : (waiting ?? '')}
+              </span>
+            )}
             <button
               type="button"
               className="primary"

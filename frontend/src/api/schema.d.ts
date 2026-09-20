@@ -168,6 +168,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/night/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Night Stream
+         * @description ``/api/night``, reported while it happens -- and where an add goes.
+         *
+         *     NDJSON: one ``NightFrameOut`` per line. Progress frames while the fold
+         *     runs, then one ``night`` frame carrying exactly what ``/api/night``
+         *     would have returned, or one ``error`` frame instead. A percentage needs
+         *     somewhere to be reported FROM, and a response that is already open is
+         *     the only such place a stateless server has.
+         *
+         *     Everything that can be refused before the first byte still is, with a
+         *     real status code: an unknown site, an unparseable date, an object the
+         *     catalogue will not plan. After that the status is committed, so a fold
+         *     that fails four seconds in arrives as an ``error`` frame carrying the
+         *     code it would have been.
+         *
+         *     With ``add``, the night is folded WITHOUT the object and the object is
+         *     then added to the folded result from ``add.at`` onward -- locking every
+         *     slot before it, so nothing lands in a part of the night that has
+         *     already happened. On a night still under way ``at`` is held at the wall
+         *     clock however far back the cursor has been dragged. An object the
+         *     optimiser cannot fit into the time that is LEFT is refused with 409 and
+         *     the reason, and the night comes back unamended.
+         */
+        post: operations["create_night_stream_api_night_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/presets": {
         parameters: {
             query?: never;
@@ -931,6 +971,7 @@ export interface components {
          *     second the plans those instants resolve to.
          */
         FullNightOut: {
+            amend?: components["schemas"]["AmendOut"] | null;
             /** Decisions */
             decisions: components["schemas"]["DecisionPlanOut"][];
             geometry: components["schemas"]["GeometryOut"];
@@ -1148,6 +1189,118 @@ export interface components {
              * @default 5
              */
             switchMinutes: number;
+        };
+        /**
+         * NightFrameOut
+         * @description One line of ``POST /api/night/stream``.
+         *
+         *     That endpoint answers in NDJSON -- one of these per line, newline
+         *     terminated -- rather than as a single JSON body, because the fold takes
+         *     seconds and the only honest way to show a percentage is to send it while
+         *     the work is happening. The response is declared here as the FRAME so the
+         *     generated client types describe what it will actually read; what it reads
+         *     is a sequence of them, not one.
+         *
+         *     ``type`` decides which of the rest are set:
+         *
+         *     ``progress``  ``fraction`` (0..1, monotone) and ``message`` (the stage)
+         *     ``night``     ``night`` -- the same payload ``POST /api/night`` returns
+         *     ``error``     ``status`` (the HTTP code this would have been) and ``detail``
+         *
+         *     An error arrives as a frame rather than as a status code because by then
+         *     the response has already begun: a fold that fails four seconds in cannot
+         *     retract the 200 its headers carried. Clients must treat an ``error`` frame
+         *     exactly as they would treat that status.
+         */
+        NightFrameOut: {
+            /** Detail */
+            detail?: string | null;
+            /** Fraction */
+            fraction?: number | null;
+            /** Message */
+            message?: string | null;
+            night?: components["schemas"]["FullNightOut"] | null;
+            /** Status */
+            status?: number | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "progress" | "night" | "error";
+        };
+        /**
+         * NightStreamRequest
+         * @description A night to fold, and optionally one object to add once it is folded.
+         *
+         *     Exactly the body ``POST /api/night`` takes, plus ``add``. ``targets`` is
+         *     the night as it stands -- WITHOUT the object being added -- because the
+         *     object joins through an amendment rather than through the fold, and that
+         *     is what confines it to the time still ahead of ``add.at``. Sending it in
+         *     ``targets`` instead asks for a different thing: a night planned from dusk
+         *     as though the object had been there all along.
+         */
+        NightStreamRequest: {
+            add?: components["schemas"]["AddTargetRequest"] | null;
+            /**
+             * Date
+             * @description night start date, UTC, YYYY-MM-DD
+             */
+            date: string;
+            /** @description overrides equipmentId when present */
+            equipment?: components["schemas"]["EquipmentRequest"] | null;
+            /**
+             * Equipmentid
+             * @default sct8-2600mm
+             */
+            equipmentId: string;
+            /**
+             * Hours
+             * @default 8
+             */
+            hours: number;
+            /** Name */
+            name?: string | null;
+            /** @description overrides siteId when present */
+            site?: components["schemas"]["SiteRequest"] | null;
+            /**
+             * Siteid
+             * @default urbana
+             */
+            siteId: string | null;
+            /**
+             * Slotminutes
+             * @default 5
+             */
+            slotMinutes: number;
+            /**
+             * Snrgoal
+             * @description per star-sized patch of the target's surface, at its MEAN brightness
+             * @default 15
+             */
+            snrGoal: number;
+            /**
+             * Solveseconds
+             * @default 4
+             */
+            solveSeconds: number;
+            /**
+             * Starthourutc
+             * @default 1
+             */
+            startHourUtc: number;
+            /**
+             * Tsubs
+             * @default 90
+             */
+            tSubS: number;
+            /** Targets */
+            targets?: components["schemas"]["TargetRequest"][] | null;
+            /**
+             * Weather
+             * @description 'auto' (real data, chosen by when the night is: archived model runs for a past night, the live forecast for tonight or a coming night), 'synthetic' (offline and deterministic -- tests and demos only), or 'open_meteo' (archived runs only)
+             * @default auto
+             */
+            weather: string;
         };
         /**
          * NightWindowOut
@@ -2257,6 +2410,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NightWindowOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_night_stream_api_night_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NightStreamRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NightFrameOut"];
                 };
             };
             /** @description Validation Error */

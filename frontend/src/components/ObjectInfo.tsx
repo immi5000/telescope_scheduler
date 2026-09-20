@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react'
 import type { ObjectDescription, SkySelection } from '../sky/scene'
 import type { SkyApi } from '../sky/SkyScene'
 import { useCursorMode, useCursorSlot } from '../state/cursorStore'
+import { FoldBar } from './FoldBar'
 
 const KIND_ICON: Record<SkySelection['kind'], string> = {
   target: '◎',
@@ -129,6 +130,12 @@ export function ObjectInfo({
           {planAction.busy ? 'Re-planning…' : planAction.label}
         </button>
       </div>
+      {/*
+        The re-plan runs for seconds. The banner over the sky carries the same
+        wait for an observer who has since closed this card or clicked away;
+        this copy is for the one still looking at what they asked for.
+      */}
+      {planAction.busy && <FoldBar label={`Adding ${desc.title} to the schedule`} />}
     </section>
   )
 }

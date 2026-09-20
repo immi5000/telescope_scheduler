@@ -37,12 +37,15 @@ to be worth writing.
 from __future__ import annotations
 
 import copy
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 import numpy as np
 
+from tscheduler import catalog
+from tscheduler.api import presets
 from tscheduler.api.session import (
     DecisionPoint,
     NightSession,
@@ -77,6 +80,72 @@ class InfeasibleError(AmendError):
     """
 
 
+class UnplannableError(AmendError):
+    """Nothing the request, the planets or the catalogue can name an object.
+
+    Also distinct from its parent, and in the other direction: every other
+    refusal here is a conflict with the night as it stands (409), while this
+    one is a request that could not be understood at all (422).
+    """
+
+
+#: Reported by an amendment as it solves, as ``(fraction, message)`` with the
+#: fraction local to the amendment. Nothing here knows how long the caller
+#: thinks an amendment should take relative to whatever else it is doing.
+AmendProgress = Callable[[float, str], None]
+
+
+def resolve_addition(
+    sess: NightSession,
+    *,
+    target: str,
+    ra_deg: float | None = None,
+    dec_deg: float | None = None,
+    magnitude: float | None = None,
+    name: str | None = None,
+    is_point_source: bool = False,
+) -> Target:
+    """The object an add names, however it names it. Resolves; adds nothing.
+
+    Lives beside the add rather than in the HTTP layer because two endpoints
+    ask this same question -- the stateful ``POST /sessions/{id}/targets`` and
+    the stateless fold-and-amend -- and one wording per refusal is the whole
+    point of the module it sits in.
+    """
+    given = (ra_deg, dec_deg, magnitude)
+    if any(v is not None for v in given):
+        # Own coordinates win over every lookup: they are how something the
+        # server has never heard of is added at all -- a star, which exists
+        # only in the browser's own catalogue. Partial coordinates are a client
+        # bug, not a reason to fall back to a name search that would resolve to
+        # something else entirely.
+        if ra_deg is None or dec_deg is None or magnitude is None:
+            raise UnplannableError("raDeg, decDeg and magnitude must be given together")
+        return Target(
+            id=target,
+            name=name or target,
+            ra_deg=float(ra_deg),
+            dec_deg=float(dec_deg),
+            magnitude=float(magnitude),
+            is_point_source=is_point_source,
+        )
+
+    known = next((t for t in sess.spec.targets if t.id == target), None)
+    # Planets BEFORE the catalogue, and the order is not arbitrary:
+    # `catalog.resolve("saturn")` finds the Saturn Nebula, so looking the
+    # catalogue up first swaps the planet for a planetary nebula without saying
+    # so. Exact body names only, which leaves "saturn nebula" and "ngc7009"
+    # resolving where they should.
+    found = (
+        known
+        or presets.planet_target(sess.spec.site, sess.spec.grid, target)
+        or presets.catalog_target(target)
+    )
+    if found is None:
+        raise UnplannableError(catalog.refusal(target) or f"{target!r} is not in the catalogue")
+    return found
+
+
 def is_amendment(reason: str) -> bool:
     """True for a decision point this module made.
 
@@ -99,12 +168,21 @@ class AmendResult:
 
 
 def add_target(
-    sess: NightSession, target: Target, *, at: datetime | None = None, now: AsOf | None = None
+    sess: NightSession,
+    target: Target,
+    *,
+    at: datetime | None = None,
+    now: AsOf | None = None,
+    on_progress: AmendProgress | None = None,
 ) -> AmendResult:
     """Add ``target`` to the night and re-plan. Blocking: it runs CP-SAT.
 
     On a live night the watch's lock is held throughout, so a scheduled check
     cannot append a decision point in the middle and be overwritten.
+
+    ``on_progress`` is called as each re-plan lands. An amendment is one solve
+    on a live night and one per remaining decision point on a replay, so how
+    long it takes is not something a caller can guess from the request.
     """
     if sess.status != SessionStatus.READY or not sess.decision_points or sess.geometry is None:
         raise AmendError("the night is still being planned; try again when it is ready")
@@ -115,10 +193,17 @@ def add_target(
     with sess._amend_lock:
         guard = sess.live.lock if sess.live is not None else nullcontext()
         with guard:
-            return _amend(sess, target, at=at, now=now or AsOf.live())
+            return _amend(sess, target, at=at, now=now or AsOf.live(), on_progress=on_progress)
 
 
-def _amend(sess: NightSession, target: Target, *, at: datetime | None, now: AsOf) -> AmendResult:
+def _amend(
+    sess: NightSession,
+    target: Target,
+    *,
+    at: datetime | None,
+    now: AsOf,
+    on_progress: AmendProgress | None = None,
+) -> AmendResult:
     spec = sess.spec
     grid = spec.grid
     dps = sess.decision_points
@@ -179,11 +264,13 @@ def _amend(sess: NightSession, target: Target, *, at: datetime | None, now: AsOf
             reason=f"added {name}",
         )
         points = (*dps, taking)
+        if on_progress is not None:
+            on_progress(1.0, f"re-planned the rest of the night around {name}")
     else:
         # Before dusk on a live night, or a replay: re-plan from `start` and
         # re-solve every later arrival on the new chain.
         early = now.t if live_now else None
-        points, taking = _refold(work, provider, dps, start, name, opts, early)
+        points, taking = _refold(work, provider, dps, start, name, opts, early, on_progress)
 
     # Time AHEAD, not merely `included`. A target whose observing is already
     # finished behind the cursor satisfies its SNR goal out of banked history,
@@ -222,6 +309,7 @@ def _refold(
     name: str,
     opts: SolveOptions,
     early: datetime | None,
+    on_progress: AmendProgress | None = None,
 ) -> tuple[tuple[DecisionPoint, ...], DecisionPoint]:
     """New decision point at ``start``; every later one re-solved on top of it."""
     k = work.decision_index_for(start)
@@ -257,6 +345,15 @@ def _refold(
         rest = dps[k + 1 :]
 
     chain = [*head, first]
+    # The first solve is the amendment; the rest carry it forward through the
+    # forecast arrivals that follow it. Both are CP-SAT, so both are counted.
+    total = 1 + len(rest)
+
+    def report(done: int) -> None:
+        if on_progress is not None:
+            on_progress(done / total, f"re-planned {done}/{total} around {name}")
+
+    report(1)
     for dp in rest:
         chain.append(
             solve_step(
@@ -269,6 +366,7 @@ def _refold(
                 reason=dp.reason,
             )
         )
+        report(len(chain) - len(head))
     return tuple(chain), first
 
 

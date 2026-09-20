@@ -4,6 +4,8 @@ Shape of the API, and why:
 
 ``GET  /api/presets``                     sites, rigs, catalog -- one POST to a session
 ``GET  /api/site/locate?lat=&lon=``       what the browser's coordinates are called
+``POST /api/night``                       fold a whole night, keep nothing
+``POST /api/night/stream``                the same, reported as it happens (NDJSON)
 ``POST /api/sessions``                    create; the fold starts in the background
 ``GET  /api/sessions``                    list
 ``GET  /api/sessions/{id}``               the night: twilight, moon, targets, decision points
@@ -404,6 +406,97 @@ def create_app(
         sess = _build_session(req, cfg)
         return await run_in_threadpool(oneshot.fold_full_night, sess, elements)
 
+    @app.post("/api/night/stream", response_model=schemas.NightFrameOut, tags=["night"])
+    async def create_night_stream(req: schemas.NightStreamRequest) -> StreamingResponse:
+        """``/api/night``, reported while it happens -- and where an add goes.
+
+        NDJSON: one ``NightFrameOut`` per line. Progress frames while the fold
+        runs, then one ``night`` frame carrying exactly what ``/api/night``
+        would have returned, or one ``error`` frame instead. A percentage needs
+        somewhere to be reported FROM, and a response that is already open is
+        the only such place a stateless server has.
+
+        Everything that can be refused before the first byte still is, with a
+        real status code: an unknown site, an unparseable date, an object the
+        catalogue will not plan. After that the status is committed, so a fold
+        that fails four seconds in arrives as an ``error`` frame carrying the
+        code it would have been.
+
+        With ``add``, the night is folded WITHOUT the object and the object is
+        then added to the folded result from ``add.at`` onward -- locking every
+        slot before it, so nothing lands in a part of the night that has
+        already happened. On a night still under way ``at`` is held at the wall
+        clock however far back the cursor has been dragged. An object the
+        optimiser cannot fit into the time that is LEFT is refused with 409 and
+        the reason, and the night comes back unamended.
+        """
+        sess = _build_session(req, cfg)
+        addition = None
+        if req.add is not None:
+            addition = oneshot.Addition(
+                target=_resolve_addition(sess, req.add), at=_utc(req.add.at)
+            )
+
+        loop = asyncio.get_running_loop()
+        # `None` closes the stream. The queue belongs to the event loop, so the
+        # fold -- which runs in a worker thread -- reaches it through
+        # `call_soon_threadsafe` and never touches it directly.
+        frames: asyncio.Queue[str | None] = asyncio.Queue()
+        opening = _ndjson({"type": "progress", "fraction": 0.0, "message": "queued"})
+
+        def emit(frame: dict[str, Any]) -> None:
+            frames.put_nowait(_ndjson(frame))
+
+        def on_progress(fraction: float, message: str) -> None:
+            loop.call_soon_threadsafe(
+                emit, {"type": "progress", "fraction": fraction, "message": message}
+            )
+
+        async def fold() -> None:
+            try:
+                night = await run_in_threadpool(
+                    oneshot.fold_full_night,
+                    sess,
+                    elements,
+                    on_progress=on_progress,
+                    addition=addition,
+                )
+                emit({"type": "night", "night": jsonable_encoder(night)})
+            except HTTPException as exc:
+                emit({"type": "error", "status": exc.status_code, "detail": str(exc.detail)})
+            except Exception as exc:  # never a truncated stream; always a reason
+                emit({"type": "error", "status": 500, "detail": f"{type(exc).__name__}: {exc}"})
+            finally:
+                frames.put_nowait(None)
+
+        async def body() -> AsyncIterator[str]:
+            # Sent before the fold is even scheduled, so the headers and a
+            # first chunk leave immediately: a proxy that waits for the first
+            # byte stops being able to sit on the whole response.
+            yield opening
+            last = opening
+            task = asyncio.create_task(fold())
+            while True:
+                try:
+                    line = await asyncio.wait_for(frames.get(), HEARTBEAT_SECONDS)
+                except TimeoutError:
+                    # A stage that runs long -- a cold forecast fetch, one hard
+                    # solve -- is still a live stream. Repeating the last frame
+                    # says so; it is idempotent for the client.
+                    yield last
+                    continue
+                if line is None:
+                    break
+                last = line
+                yield line
+            await task
+
+        return StreamingResponse(
+            body(),
+            media_type="application/x-ndjson",
+            headers={"cache-control": "no-store", "x-accel-buffering": "no"},
+        )
+
     @app.post(
         "/api/sessions",
         response_model=schemas.SessionOut,
@@ -484,48 +577,8 @@ def create_app(
         happened. 422 is for an object the catalogue will not plan at all.
         """
         sess = require_ready(session_id)
-        given = (req.ra_deg, req.dec_deg, req.magnitude)
-        if any(v is not None for v in given):
-            # Own coordinates win over every lookup: they are how something the
-            # server has never heard of is added at all -- a star, which exists
-            # only in the browser's own catalogue (see AddTargetRequest).
-            # Partial coordinates are a client bug, not a reason to fall back to
-            # a name search that would resolve to something else entirely.
-            if any(v is None for v in given):
-                raise HTTPException(
-                    UNPROCESSABLE, "raDeg, decDeg and magnitude must be given together"
-                )
-            ra, dec, mag = given
-            target: Target | None = Target(
-                id=req.target,
-                name=req.name or req.target,
-                ra_deg=float(ra),  # type: ignore[arg-type]
-                dec_deg=float(dec),  # type: ignore[arg-type]
-                magnitude=float(mag),  # type: ignore[arg-type]
-                is_point_source=req.is_point_source,
-            )
-        else:
-            known = next((t for t in sess.spec.targets if t.id == req.target), None)
-            # Planets BEFORE the catalogue, and the order is not arbitrary:
-            # `catalog.resolve("saturn")` finds the Saturn Nebula, so looking the
-            # catalogue up first swaps the planet for a planetary nebula without
-            # saying so. Exact body names only, which leaves "saturn nebula" and
-            # "ngc7009" resolving where they should.
-            target = (
-                known
-                or presets.planet_target(sess.spec.site, sess.spec.grid, req.target)
-                or presets.catalog_target(req.target)
-            )
-        # Hoisted out of the else: narrowing inside it leaves `Target | None`
-        # on the path that took the coordinate branch, which mypy is right to
-        # reject even though that branch cannot produce None.
-        if target is None:
-            why = catalog.refusal(req.target) or f"{req.target!r} is not in the catalogue"
-            raise HTTPException(UNPROCESSABLE, why)
-        # A naive instant is UTC, as everywhere else in this API.
-        at = None
-        if req.at is not None:
-            at = req.at.replace(tzinfo=UTC) if req.at.tzinfo is None else req.at.astimezone(UTC)
+        target = _resolve_addition(sess, req)
+        at = _utc(req.at)
         loop = asyncio.get_running_loop()
         try:
             result = await loop.run_in_executor(None, lambda: amend.add_target(sess, target, at=at))
@@ -698,6 +751,46 @@ def create_app(
         )
 
     return app
+
+
+def _ndjson(frame: dict[str, Any]) -> str:
+    """One newline-terminated frame.
+
+    ``allow_nan=False`` deliberately, and it is the same setting Starlette's
+    ``JSONResponse`` uses: Python will happily write a bare ``NaN``, and it is
+    not JSON -- every browser's ``JSON.parse`` rejects it, which would turn one
+    non-finite number deep in a grid into an unreadable response with nothing
+    to say why. Raising here instead makes it an ``error`` frame.
+    """
+    return json.dumps(frame, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+
+
+def _utc(t: datetime | None) -> datetime | None:
+    """A naive instant is UTC, as everywhere else in this API."""
+    if t is None:
+        return None
+    return t.replace(tzinfo=UTC) if t.tzinfo is None else t.astimezone(UTC)
+
+
+def _resolve_addition(sess: NightSession, req: schemas.AddTargetRequest) -> Target:
+    """The object an add names. See ``amend.resolve_addition`` for the rules.
+
+    Only the HTTP code is decided here: an object nothing can name is a bad
+    request (422), which is a different thing from a night that cannot take
+    one (409, raised later by the add itself).
+    """
+    try:
+        return amend.resolve_addition(
+            sess,
+            target=req.target,
+            ra_deg=req.ra_deg,
+            dec_deg=req.dec_deg,
+            magnitude=req.magnitude,
+            name=req.name,
+            is_point_source=req.is_point_source,
+        )
+    except amend.UnplannableError as exc:
+        raise HTTPException(UNPROCESSABLE, str(exc)) from exc
 
 
 def _build_session(req: schemas.SessionRequest, cfg: Settings) -> NightSession:

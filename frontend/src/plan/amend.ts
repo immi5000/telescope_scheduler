@@ -1,24 +1,43 @@
 /**
  * Adding an object to the night, from the sky.
  *
- * There is no session on the server to amend, so this adds the object to the
- * request the night was folded from and folds it again -- the whole night, not
- * a patch to it. The planning rules are unchanged, because they live in the
- * fold: every plan is still built at its own `as_of` and the past is still
- * locked at each one.
+ * There is no session on the server to amend, so this sends the request the
+ * night was folded from and names the object separately, in `add`. The server
+ * then folds the night WITHOUT it and adds it to the folded result -- which is
+ * not the same thing as folding a night that had it all along, and the
+ * difference is the whole point:
+ *
+ * **An object added at 02:00 may only be given time after 02:00.** Every slot
+ * before the instant it was asked for is locked to the plan already handed
+ * over, so the re-plan can extend the night but never rewrite it. This module
+ * used to append the object to `targets` and re-fold from dusk, which meant an
+ * object asked for at 02:00 could come back scheduled for 22:15 -- an answer
+ * about a night that has been and gone.
+ *
+ * On a night still under way the server holds that instant at the wall clock
+ * however far back the cursor has been dragged, because a plan the observer
+ * was already given is not a plan to rewrite.
  *
  * What survives verbatim is the contract the old endpoint made, and it is the
  * part worth keeping: an object the optimiser cannot give time to is REFUSED,
- * and the night is left exactly as it was. A fold that comes back without the
- * new target in it is discarded rather than shown, so a caller never has to
- * undo an add it was told had not happened.
+ * and the night is left exactly as it was. The refusal now carries the
+ * server's own reason -- how many usable minutes are left, or that the object
+ * never clears the altitude floor again tonight -- instead of a guess made
+ * here from the absence of the target in the answer.
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
-import { api, type FullNight, type SessionRequest, type Target } from '../api/client'
+import {
+  api,
+  ApiError,
+  type FullNight,
+  type NightStreamRequest,
+  type Target,
+} from '../api/client'
 import type { components } from '../api/schema'
 import { applyNight, nightKey, nightRequest } from '../hooks'
+import { foldProgress } from './foldProgress'
 
 export type Catalog = components['schemas']['CatalogOut']
 export type CatalogObject = components['schemas']['CatalogObjectOut']
@@ -48,14 +67,6 @@ export interface OwnCoordinates {
   isPointSource?: boolean
 }
 
-/**
- * `add(target, atMs, own)` asks the server to add `target` and re-plan. While
- * it runs, `busy` names the target, so the button that asked can say so.
- *
- * `own` carries the object's own coordinates, for the one case the server
- * cannot look anything up: a star, which exists only in the browser's
- * `stars.bin`. Omit it and the server resolves `target` as a name.
- */
 /** `TargetOut` carries every field `TargetRequest` takes, so a folded night
  * can be turned back into the request that would fold it again. */
 function asTargetRequest(t: Target): components['schemas']['TargetRequest'] {
@@ -71,6 +82,19 @@ function asTargetRequest(t: Target): components['schemas']['TargetRequest'] {
   }
 }
 
+/**
+ * `add(target, atMs, own)` asks the server to add `target` from `atMs` onward
+ * and re-plan. While it runs, `busy` names the target, so the button that
+ * asked can say so, and `foldProgress` carries how far along it is.
+ *
+ * `atMs` is the cursor -- the instant the observer is looking at, which on a
+ * night still happening is the present. It is the instant the new object may
+ * first be given time at, not merely a label on the answer.
+ *
+ * `own` carries the object's own coordinates, for the one case the server
+ * cannot look anything up: a star, which exists only in the browser's
+ * `stars.bin`. Omit it and the server resolves `target` as a name.
+ */
 export function useAddTarget(sessionId: string | null) {
   const qc = useQueryClient()
   const [busy, setBusy] = useState<string | null>(null)
@@ -83,53 +107,55 @@ export function useAddTarget(sessionId: string | null) {
       if (!base || !current) throw new Error('this night is no longer loaded')
 
       setBusy(target)
+      const label = own?.name ?? target
+      const stage = foldProgress.start('add', label, 'planning the night as it stands')
       try {
-        const req: SessionRequest = {
+        const req: NightStreamRequest = {
           ...base,
-          targets: [
-            ...current.session.targets.map(asTargetRequest),
-            {
-              id: target,
-              name: own?.name ?? null,
-              raDeg: own?.raDeg ?? null,
-              decDeg: own?.decDeg ?? null,
-              magnitude: own?.magnitude ?? null,
-              // The server's own defaults, restated because the generated
-              // type makes them required on the way in.
-              priority: 1,
-              urgency: 1,
-            },
-          ],
+          // The night as it stands. The object being added is NOT here: it
+          // joins through `add`, after the fold, which is what confines it to
+          // the time still ahead.
+          targets: current.session.targets.map(asTargetRequest),
+          add: {
+            target,
+            at: new Date(atMs).toISOString(),
+            name: own?.name ?? null,
+            raDeg: own?.raDeg ?? null,
+            decDeg: own?.decDeg ?? null,
+            magnitude: own?.magnitude ?? null,
+            isPointSource: own?.isPointSource ?? false,
+          },
         }
-        const night = await api.night(req)
-
-        // Which target is new is answered by difference, not by name: the
-        // server resolves `target` through the catalogue and the id it comes
-        // back with need not be the string that was sent.
-        const before = new Set(current.session.targets.map((t) => t.id))
-        const added = night.session.targets.find((t) => !before.has(t.id))
-        const last = night.decisions[night.decisions.length - 1]?.plan
-        const got = added ? last?.progress.find((p) => p.targetId === added.id) : undefined
-
-        if (!added || !got?.included) {
-          // Refused. `night` is dropped on the floor and the cache is not
-          // touched, so the observer keeps looking at the night they had.
-          throw new Error(
-            `${own?.name ?? target} could not be given time tonight without taking it ` +
-              'from something already scheduled. The night is unchanged.',
-          )
+        // A refusal arrives as a 409 and is thrown, so nothing below runs and
+        // the cache is never touched: the observer keeps the night they had,
+        // which is also the night the server still describes.
+        const night = await api.nightStream(req, stage)
+        if (!night.amend) {
+          throw new ApiError(502, `${label} was not added, and the server did not say why.`)
         }
 
-        applyNight(qc, sessionId, req, night)
-        return {
+        // What this night would be folded from AGAIN carries the object in
+        // `targets`, not in `add`: an amendment applies to a night that
+        // already exists, and replaying it onto a fresh fold would ask for the
+        // same addition a second time. Re-planning then does what the control
+        // that offers it says it does -- folds the whole night from dusk, for
+        // every target, added or original -- so the added object competes on
+        // its merits rather than keeping the slot the amendment gave it.
+        applyNight(
+          qc,
           sessionId,
-          targetId: added.id,
-          targetName: added.name,
-          at: new Date(atMs).toISOString(),
-          decisionIndex: last?.decisionIndex ?? 0,
-          message: `${added.name} added; the night was re-planned around it.`,
-        }
+          { ...base, targets: night.session.targets.map(asTargetRequest) },
+          night,
+        )
+        // The id the SERVER minted for this fold names nothing that outlives
+        // the response, and `applyNight` has already replaced it on the night
+        // itself. The amendment has to agree with it, because the toast it
+        // raises is keyed on the same pair the news alert for that decision
+        // point is -- and two spellings of the id mean the observer is told
+        // twice.
+        return { ...night.amend, sessionId }
       } finally {
+        foldProgress.finish()
         setBusy(null)
       }
     },

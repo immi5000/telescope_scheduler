@@ -833,6 +833,57 @@
   -webkit-backdrop-filter: blur(16px);
 }
 
+/* -- the fold bar --------------------------------------------------------- */
+
+/**
+ * A wait that lasts seconds, said in the one shape this app already has for
+ * "how far along is this": `.meter`. It takes the width it is given, because
+ * the two places it appears -- the foot of the setup sheet, the object card --
+ * are different widths and a bar that is not the width of its container reads
+ * as a component that was dropped in rather than built in.
+ */
+.foldbar {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+}
+.foldbar__heading {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+.foldbar__stage {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+/* The stage names a step of the fold and can be a sentence; the percentage
+   beside it must not be pushed off the end by one. */
+.foldbar__msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.foldbar__pct {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Wide enough to hold a stage message without the bar under it changing
+   length word by word, and capped so it stays clear of both side docks. */
+.foldbanner {
+  width: min(360px, calc(100vw - 2 * var(--sp-4)));
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-card);
+  border: 1px solid var(--edge-faint);
+}
+
 .empty {
   display: grid;
   place-items: center;

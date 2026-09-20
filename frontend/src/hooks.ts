@@ -11,6 +11,7 @@ import {
   type FullNight,
   type SessionRequest,
 } from "./api/client";
+import { foldProgress } from "./plan/foldProgress";
 
 /**
  * Every hook below reads one cache entry.
@@ -81,7 +82,17 @@ export function applyNight(
 function useNightQuery<T>(id: string | null, select: (n: FullNight) => T, enabled = true) {
   return useQuery({
     queryKey: nightKey(id),
-    queryFn: () => api.night(REQUESTS.get(id!)!).then((n) => withId(n, id!)),
+    queryFn: async () => {
+      // Every refetch of this key is a whole re-fold -- "Re-plan now" is the
+      // only thing that asks for one -- so it is the same seconds-long wait
+      // creating the night is, and reports itself the same way.
+      const stage = foldProgress.start("refold", null, "re-planning the night");
+      try {
+        return withId(await api.nightStream(REQUESTS.get(id!)!, stage), id!);
+      } finally {
+        foldProgress.finish();
+      }
+    },
     enabled: !!id && enabled && REQUESTS.has(id ?? ""),
     staleTime: Infinity,
     gcTime: Infinity,
@@ -100,16 +111,26 @@ export function usePresets() {
  * that sets `sessionId` from it can never render a frame where the id exists
  * and the night does not. The id is the server's own -- it still names the
  * session it built, it simply no longer has anywhere to look it up.
+ *
+ * Streamed rather than posted, for the progress alone: the payload and the
+ * planning rules are identical either way. Three to seven seconds of nothing
+ * is the one part of creating a night that felt broken, and a server that
+ * keeps no session has nowhere else to report a percentage from.
  */
 export function useCreateNight() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (req: SessionRequest) => {
-      const night = await api.night(req);
-      const id = night.session.id;
-      REQUESTS.set(id, req);
-      qc.setQueryData(nightKey(id), night);
-      return night;
+      const stage = foldProgress.start("create", null, "planning the night");
+      try {
+        const night = await api.nightStream(req, stage);
+        const id = night.session.id;
+        REQUESTS.set(id, req);
+        qc.setQueryData(nightKey(id), night);
+        return night;
+      } finally {
+        foldProgress.finish();
+      }
     },
   });
 }

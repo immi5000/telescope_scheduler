@@ -24,6 +24,7 @@ import { ApiError, type SessionRequest } from './api/client'
 import { CATEGORY, changed, decisionCategory } from './alerts/model'
 import { useAlertToasts, useAlerts } from './alerts/useAlerts'
 import { BottomBar } from './components/BottomBar'
+import { FoldBanner } from './components/FoldBar'
 import { ObjectInfo, type PlanAction } from './components/ObjectInfo'
 import { Setup } from './components/Setup'
 import { Modal } from './components/Modal'
@@ -364,6 +365,13 @@ export default function App() {
           }}
           onChoose={selectInSky}
         />
+
+        {/*
+          Any re-plan that happens with the sky in view: adding an object, or
+          re-folding against the current forecast. It is its own subscriber, so
+          nothing here re-renders while it ticks.
+        */}
+        <FoldBanner />
 
         {s && !geometry.data && (
           <div className="banner chip">

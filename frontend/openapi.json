@@ -1083,6 +1083,16 @@
       "FullNightOut": {
         "description": "A folded night, complete, with nothing left on the server.\n\nThere is no session id here, and its absence is the point: an id is a\nhandle on state, and no state was kept. Everything the UI can ask about\nthis night is in this object, so a scrub is a lookup in ``decisions``\nrather than a request, and a refresh is this same POST sent again.\n\n``session.decisionPoints`` and ``decisions`` are the same points in the\nsame order -- the first carries the timeline the slider snaps to, the\nsecond the plans those instants resolve to.",
         "properties": {
+          "amend": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AmendOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "decisions": {
             "items": {
               "$ref": "#/components/schemas/DecisionPlanOut"
@@ -1673,6 +1683,215 @@
           }
         },
         "title": "MountRequest",
+        "type": "object"
+      },
+      "NightFrameOut": {
+        "description": "One line of ``POST /api/night/stream``.\n\nThat endpoint answers in NDJSON -- one of these per line, newline\nterminated -- rather than as a single JSON body, because the fold takes\nseconds and the only honest way to show a percentage is to send it while\nthe work is happening. The response is declared here as the FRAME so the\ngenerated client types describe what it will actually read; what it reads\nis a sequence of them, not one.\n\n``type`` decides which of the rest are set:\n\n``progress``  ``fraction`` (0..1, monotone) and ``message`` (the stage)\n``night``     ``night`` -- the same payload ``POST /api/night`` returns\n``error``     ``status`` (the HTTP code this would have been) and ``detail``\n\nAn error arrives as a frame rather than as a status code because by then\nthe response has already begun: a fold that fails four seconds in cannot\nretract the 200 its headers carried. Clients must treat an ``error`` frame\nexactly as they would treat that status.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "fraction": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fraction"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "night": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FullNightOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "type": {
+            "enum": [
+              "progress",
+              "night",
+              "error"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "NightFrameOut",
+        "type": "object"
+      },
+      "NightStreamRequest": {
+        "description": "A night to fold, and optionally one object to add once it is folded.\n\nExactly the body ``POST /api/night`` takes, plus ``add``. ``targets`` is\nthe night as it stands -- WITHOUT the object being added -- because the\nobject joins through an amendment rather than through the fold, and that\nis what confines it to the time still ahead of ``add.at``. Sending it in\n``targets`` instead asks for a different thing: a night planned from dusk\nas though the object had been there all along.",
+        "properties": {
+          "add": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AddTargetRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "date": {
+            "description": "night start date, UTC, YYYY-MM-DD",
+            "title": "Date",
+            "type": "string"
+          },
+          "equipment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EquipmentRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "overrides equipmentId when present"
+          },
+          "equipmentId": {
+            "default": "sct8-2600mm",
+            "title": "Equipmentid",
+            "type": "string"
+          },
+          "hours": {
+            "default": 8.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 16.0,
+            "title": "Hours",
+            "type": "number"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "site": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SiteRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "overrides siteId when present"
+          },
+          "siteId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "urbana",
+            "title": "Siteid"
+          },
+          "slotMinutes": {
+            "default": 5,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Slotminutes",
+            "type": "integer"
+          },
+          "snrGoal": {
+            "default": 15.0,
+            "description": "per star-sized patch of the target's surface, at its MEAN brightness",
+            "exclusiveMinimum": 0.0,
+            "title": "Snrgoal",
+            "type": "number"
+          },
+          "solveSeconds": {
+            "default": 4.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 60.0,
+            "title": "Solveseconds",
+            "type": "number"
+          },
+          "startHourUtc": {
+            "default": 1.0,
+            "exclusiveMaximum": 24.0,
+            "minimum": 0.0,
+            "title": "Starthourutc",
+            "type": "number"
+          },
+          "tSubS": {
+            "default": 90.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Tsubs",
+            "type": "number"
+          },
+          "targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TargetRequest"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targets"
+          },
+          "weather": {
+            "default": "auto",
+            "description": "'auto' (real data, chosen by when the night is: archived model runs for a past night, the live forecast for tonight or a coming night), 'synthetic' (offline and deterministic -- tests and demos only), or 'open_meteo' (archived runs only)",
+            "title": "Weather",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "NightStreamRequest",
         "type": "object"
       },
       "NightWindowOut": {
@@ -4372,6 +4591,48 @@
         "summary": "Get Night Window",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/night/stream": {
+      "post": {
+        "description": "``/api/night``, reported while it happens -- and where an add goes.\n\nNDJSON: one ``NightFrameOut`` per line. Progress frames while the fold\nruns, then one ``night`` frame carrying exactly what ``/api/night``\nwould have returned, or one ``error`` frame instead. A percentage needs\nsomewhere to be reported FROM, and a response that is already open is\nthe only such place a stateless server has.\n\nEverything that can be refused before the first byte still is, with a\nreal status code: an unknown site, an unparseable date, an object the\ncatalogue will not plan. After that the status is committed, so a fold\nthat fails four seconds in arrives as an ``error`` frame carrying the\ncode it would have been.\n\nWith ``add``, the night is folded WITHOUT the object and the object is\nthen added to the folded result from ``add.at`` onward -- locking every\nslot before it, so nothing lands in a part of the night that has\nalready happened. On a night still under way ``at`` is held at the wall\nclock however far back the cursor has been dragged. An object the\noptimiser cannot fit into the time that is LEFT is refused with 409 and\nthe reason, and the night comes back unamended.",
+        "operationId": "create_night_stream_api_night_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NightStreamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NightFrameOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Night Stream",
+        "tags": [
+          "night"
         ]
       }
     },
