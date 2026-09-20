@@ -83,9 +83,11 @@ function asTargetRequest(t: Target): components['schemas']['TargetRequest'] {
 }
 
 /**
- * `add(target, atMs, own)` asks the server to add `target` from `atMs` onward
- * and re-plan. While it runs, `busy` names the target, so the button that
- * asked can say so, and `foldProgress` carries how far along it is.
+ * `add(target, atMs, label, own)` asks the server to add `target` from `atMs`
+ * onward and re-plan. While it runs, `busy` names the target, so the button
+ * that asked can say so, and `foldProgress` carries how far along it is under
+ * `label` -- what the observer has been reading it called, which is not the
+ * catalogue id that travels on the wire.
  *
  * `atMs` is the cursor -- the instant the observer is looking at, which on a
  * night still happening is the present. It is the instant the new object may
@@ -100,14 +102,18 @@ export function useAddTarget(sessionId: string | null) {
   const [busy, setBusy] = useState<string | null>(null)
 
   const add = useCallback(
-    async (target: string, atMs: number, own?: OwnCoordinates): Promise<AmendResult> => {
+    async (
+      target: string,
+      atMs: number,
+      label: string,
+      own?: OwnCoordinates,
+    ): Promise<AmendResult> => {
       if (!sessionId) throw new Error('no session')
       const base = nightRequest(sessionId)
       const current = qc.getQueryData<FullNight>(nightKey(sessionId))
       if (!base || !current) throw new Error('this night is no longer loaded')
 
       setBusy(target)
-      const label = own?.name ?? target
       const stage = foldProgress.start('add', label, 'planning the night as it stands')
       try {
         const req: NightStreamRequest = {

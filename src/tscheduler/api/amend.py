@@ -55,7 +55,7 @@ from tscheduler.api.session import (
     solve_step,
     weather_query,
 )
-from tscheduler.core.clock import AsOf
+from tscheduler.core.clock import AsOf, Vantage
 from tscheduler.core.timegrid import TimeGrid
 from tscheduler.domain.plan import Block
 from tscheduler.domain.targets import Target
@@ -265,11 +265,19 @@ def _amend(
         )
         points = (*dps, taking)
         if on_progress is not None:
-            on_progress(1.0, f"re-planned the rest of the night around {name}")
+            on_progress(1.0, f"re-planned the night from {when:%H:%M} UTC")
     else:
         # Before dusk on a live night, or a replay: re-plan from `start` and
         # re-solve every later arrival on the new chain.
-        early = now.t if live_now else None
+        #
+        # The gate is on the INSTANT, not on there being a watch. `fold_night`
+        # narrows the opening plan of a night that has not started to what
+        # exists at the wall clock (`data_as_of`, api/session.py), and an
+        # amendment that re-makes that same opening plan has to be narrowed
+        # the same way or the response carries two opening plans built on
+        # different information. A stateless amendment has no watch to ask, so
+        # asking one was the wrong question.
+        early = now.t if now.vantage is Vantage.LIVE and now.t < grid.start else None
         points, taking = _refold(work, provider, dps, start, name, opts, early, on_progress)
 
     # Time AHEAD, not merely `included`. A target whose observing is already
@@ -351,7 +359,12 @@ def _refold(
 
     def report(done: int) -> None:
         if on_progress is not None:
-            on_progress(done / total, f"re-planned {done}/{total} around {name}")
+            on_progress(
+                done / total,
+                f"re-planned the night from {start:%H:%M} UTC"
+                if total == 1
+                else f"re-planned {done}/{total} decision points from {start:%H:%M} UTC",
+            )
 
     report(1)
     for dp in rest:
@@ -409,14 +422,33 @@ def _refusal(dp: DecisionPoint, target_id: str, name: str) -> str:
             f"at all ({dropped.message}). Nothing has changed -- try again, or give the night "
             "more solve time."
         )
+    if dropped is not None and dropped.code in ("never_up", "no_window"):
+        # The solver already wrote this sentence, from the inputs it solved and
+        # measured over the time still AHEAD (`_drop_reason` counts from
+        # `first_free_slot`). Synthesising a second account here is how "no
+        # usable 25-minute window left" became "outranked by the targets
+        # already planned", which names a competition that never took place.
+        return f"After {dp.at:%H:%M} UTC, {name} {dropped.message}"
+
     inp = dp.inp
     i = inp.target_ids.index(target_id)
     free = inp.first_free_slot
-    usable = int(np.count_nonzero(inp.visible[i, free:] & (inp.eta[i, free:] > 0)))
+    visible = inp.visible[i, free:]
+    usable = int(np.count_nonzero(visible & (inp.eta[i, free:] > 0)))
     if usable == 0:
+        if not bool(np.any(visible)):
+            return (
+                f"{name} cannot be observed after {dp.at:%H:%M} UTC: it never clears the altitude "
+                "floor and the Moon's exclusion again tonight"
+            )
+        # Visible and still worth nothing. Efficiency is multiplied by the
+        # cloud duty cycle, which is exactly zero under total cover, so an
+        # object sixty degrees up can have no usable minute left without going
+        # anywhere near the horizon -- and telling its owner it never rises
+        # sends them to look up a rise time that is not the problem.
         return (
-            f"{name} cannot be observed after {dp.at:%H:%M} UTC: it never clears the altitude "
-            "floor and the Moon's exclusion again tonight"
+            f"{name} cannot be observed after {dp.at:%H:%M} UTC: the forecast has the sky fully "
+            "overcast for the rest of the night"
         )
     minutes = usable * inp.grid.slot_minutes
     return (

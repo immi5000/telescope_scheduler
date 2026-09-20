@@ -267,6 +267,10 @@ export default function App() {
         const out = await addTarget(
           id,
           cursor.live.tMs,
+          // What to call it while the re-plan runs. The card's own title,
+          // because the id is what the catalogue calls it and the observer
+          // has been reading the name all along.
+          skyApi?.describe(sel)?.title ?? own?.name ?? id,
           own === null
             ? undefined
             : {

@@ -14,7 +14,6 @@ import { useEffect, useState } from 'react'
 import type { ObjectDescription, SkySelection } from '../sky/scene'
 import type { SkyApi } from '../sky/SkyScene'
 import { useCursorMode, useCursorSlot } from '../state/cursorStore'
-import { FoldBar } from './FoldBar'
 
 const KIND_ICON: Record<SkySelection['kind'], string> = {
   target: '◎',
@@ -131,11 +130,12 @@ export function ObjectInfo({
         </button>
       </div>
       {/*
-        The re-plan runs for seconds. The banner over the sky carries the same
-        wait for an observer who has since closed this card or clicked away;
-        this copy is for the one still looking at what they asked for.
+        No progress bar here, deliberately. The re-plan runs for seconds and
+        `FoldBanner` carries it, top centre, where it survives this card being
+        closed or the selection changing. A second copy at the foot of a card
+        this tall is clipped by the dock as often as not, and the button
+        already says what it is doing.
       */}
-      {planAction.busy && <FoldBar label={`Adding ${desc.title} to the schedule`} />}
     </section>
   )
 }

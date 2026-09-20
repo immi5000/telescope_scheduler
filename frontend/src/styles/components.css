@@ -875,9 +875,21 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Wide enough to hold a stage message without the bar under it changing
-   length word by word, and capped so it stays clear of both side docks. */
+/**
+ * Top centre, under the top bar rather than behind it.
+ *
+ * `.banner` alone puts it at `--sp-3`, which is INSIDE the 48px top bar and
+ * under it in the stacking order, so the search field lands on top of it.
+ * 60px is where both docks start, for the same reason.
+ *
+ * Above everything, because it is a transient report on something the
+ * observer has just done: at a narrow window it crosses the left dock for the
+ * few seconds a re-plan takes, and covering a panel briefly is the right way
+ * round -- the panel is still describing the night this is re-planning.
+ */
 .foldbanner {
+  top: 60px;
+  z-index: 7;
   width: min(360px, calc(100vw - 2 * var(--sp-4)));
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--r-card);

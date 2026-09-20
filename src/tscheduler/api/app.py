@@ -106,10 +106,18 @@ GZIP_EXCLUDED_CONTENT_TYPES: tuple[str, ...] = tuple(
 """Starlette's defaults, with SSE pinned explicitly.
 
 ``text/event-stream`` is already in the default tuple, and naming it again
-costs nothing while making the requirement legible: a gzipped event stream
-buffers until the compression window fills, so a live notification arrives
-minutes late instead of immediately -- a failure far too quiet to leave resting
-on someone else's default.
+costs nothing while making the requirement legible: an event stream is a
+sequence of independent notifications, and anything between here and the
+browser that buffers one delivers a live alert minutes late -- a failure far
+too quiet to leave resting on someone else's default.
+
+It is NOT a statement about Starlette, and the difference matters because
+``/api/night/stream`` depends on the other half of it. Starlette flushes a
+streaming body per chunk (``Z_SYNC_FLUSH``), so ``application/x-ndjson`` is
+deliberately absent from this tuple: its progress frames still arrive as they
+are produced, and its final frame -- the whole night, three quarters of a
+megabyte -- compresses better than three to one. Excluding it would buy
+nothing and cost that.
 
 Built by extending the defaults rather than replacing them, because passing
 only the one entry would silently re-enable compression of already-compressed

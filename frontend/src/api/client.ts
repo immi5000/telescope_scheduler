@@ -68,6 +68,11 @@ export interface FoldStage {
 
 export type OnFoldStage = (stage: FoldStage) => void;
 
+/** A stream that stopped mid-frame. The night is unchanged; nothing arrived. */
+const CUT_OFF =
+  "The fold was cut off before it finished. Nothing has changed \u2014 try again, " +
+  "or plan a shorter night.";
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -158,7 +163,20 @@ async function nightStream(
     const decoder = new TextDecoder();
     let buffer = "";
     for (;;) {
-      const { done, value } = await reader.read();
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch (err) {
+        // The connection went away with the 200 already committed -- which is
+        // what a function hitting its time limit looks like from here, and
+        // what a dropped link looks like too. Under gzip the truncated member
+        // rejects the read rather than ending it, so this is where that lands;
+        // an ApiError is thrown for both, because "the fold was cut off" is
+        // the thing to say, not a decoder's word for it.
+        if (err instanceof ApiError) throw err;
+        throw new ApiError(504, CUT_OFF);
+      }
+      const { done, value } = chunk;
       // `stream: true` matters: a frame is ~900 KB and WILL be split across
       // chunks, sometimes mid-character. Decoding each chunk independently
       // mangles the byte that straddles the boundary.
@@ -172,7 +190,10 @@ async function nightStream(
       }
       if (done) break;
     }
-    take(buffer);
+    // Every frame is newline terminated, so anything left over is half of one:
+    // the same cut-off, arriving as a clean end instead of a rejected read.
+    // Parsing it would report a truncated fold as a JSON syntax error.
+    if (buffer.trim()) throw new ApiError(504, CUT_OFF);
   } else {
     // No streams here (an old browser, or a test double). The body is the same
     // lines either way, so reading it whole still yields the night.

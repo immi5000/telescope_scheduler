@@ -54,6 +54,7 @@ from fastapi import HTTPException, status
 from tscheduler.api import amend, mappers, schemas, skyview
 from tscheduler.api.session import NightSession, SessionStatus, fold_night
 from tscheduler.core.clock import AsOf
+from tscheduler.core.timegrid import TimeGrid
 from tscheduler.domain.targets import Target
 from tscheduler.providers.satellites.base import SatelliteElementsProvider
 
@@ -195,8 +196,15 @@ def _add(session: NightSession, addition: Addition, report: Progress) -> schemas
         # already been given -- and could give the new object time at 22:15,
         # which is exactly the answer that cannot be acted on.
         at = max(at, now.t)
+    at = _next_boundary(grid, at)
+    if at >= grid.end:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"the night ends at {grid.end:%H:%M} UTC and there is no time left in it to give "
+            f"{addition.target.name}. Nothing has changed.",
+        )
 
-    report(AMENDED_FOLD_SHARE, f"re-planning the night around {addition.target.name}")
+    report(AMENDED_FOLD_SHARE, f"re-planning the night from {at:%H:%M} UTC")
     span = AMENDED_SHARE - AMENDED_FOLD_SHARE
     try:
         result = amend.add_target(
@@ -221,6 +229,31 @@ def _add(session: NightSession, addition: Addition, report: Progress) -> schemas
         decision_index=result.decision.index,
         message=result.message,
     )
+
+
+def _next_boundary(grid: TimeGrid, t: datetime) -> datetime:
+    """The first slot boundary at or after ``t``. May be the end of the night.
+
+    ROUNDED UP, not down, and that is the whole difference between "added
+    after two" and "added at five to two". ``solve_step`` locks every slot
+    before the instant it is given and leaves the rest free, and
+    ``TimeGrid.index_of`` is a floor -- so handing it 02:03 leaves the
+    02:00-02:05 slot free and the answer comes back "scheduled 02:00-03:30
+    UTC", three minutes of which have already happened. At the widest slot the
+    API allows, thirty minutes, an add at 02:29 would read 02:00.
+
+    Rounding up locks the slot in progress too, which is also the physical
+    answer: you cannot start a block in the middle of one, and the exposure
+    running in it is not yours to reassign.
+
+    Done HERE rather than in ``solve_step``, which the live watch shares: a
+    watch appending a decision point mid-slot is deliberately allowed to
+    re-plan the remainder of that slot, because nothing was promised to a new
+    object at the time.
+    """
+    i = grid.index_of(t)
+    start = grid.slot_start(i)
+    return start if start == t else grid.slot_start(i + 1)
 
 
 def _ready(session: NightSession) -> str:
