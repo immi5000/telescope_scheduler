@@ -28,6 +28,17 @@ class Target:
     kind: TargetKind = TargetKind.STATIC
     snr_goal: float | None = None
     discovered_at: datetime | None = None
+    is_point_source: bool = False
+    """Whether ``magnitude`` is a TOTAL V magnitude rather than a surface
+    brightness in mag/arcsec^2.
+
+    False for everything in the deep-sky catalogue and for the planets, whose
+    discs are resolved surfaces. True for a star, which is the one case where
+    all the light lands inside the photometric aperture and the solid-angle
+    factor must not be applied. ``physics.quality.efficiency`` reads it, and
+    reading it wrongly is a factor of ~25 in exposure time -- see
+    ``point_snr2_rate``. Defaults to False so nothing that existed before this
+    field changes meaning."""
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.ra_deg < 360.0:

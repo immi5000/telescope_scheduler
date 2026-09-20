@@ -177,7 +177,15 @@ def run_comparison(
         locked_observing = frozenset(
             s for s in range(first_free) if prev.assignments[s].kind is SlotKind.OBSERVE
         )
-        previous = {s: prev.assignments[s].target_id for s in range(first_free, grid.n_slots)}
+        # A plan the solver failed to find is idle after its history; offering
+        # it as the plan to stay close to would make the change penalty argue
+        # for an idle night.
+        found = prev.status in ("OPTIMAL", "FEASIBLE")
+        previous = (
+            {s: prev.assignments[s].target_id for s in range(first_free, grid.n_slots)}
+            if found
+            else {}
+        )
         inp, led = build_scheduler_input(
             spec,
             geo,

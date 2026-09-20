@@ -1,0 +1,938 @@
+/**
+ * Panels over a full-bleed sky. No colour literals -- see base.css.
+ *
+ * Everything on this page that is not the sky is one of three things:
+ *
+ *   - a CARD: dark glass, one hairline, 8px corners, no shadow;
+ *   - a CONTROL: 6px corners, a real fill a step above the card it sits on;
+ *   - a HEAD: sentence-case Inter, dimmer and smaller than what it labels.
+ *
+ * The one exception is the single ACCENT control -- Create night, Add to
+ * schedule -- which is the action that changes the night. Keeping it to one
+ * per surface is what makes it findable without an arrow pointing at it.
+ *
+ * Nothing here is set in uppercase monospace. See base.css for why.
+ *
+ * The sky is FULL BLEED: every piece of chrome, the nightbar included, floats
+ * over it. There is no footer band and no letterbox -- the page is the sky,
+ * and the instruments sit in it. That is why the panels are glass rather than
+ * fill: the Milky Way has to keep running behind them or they read as a
+ * dashboard bolted over a photograph.
+ */
+
+.app {
+  position: relative;
+  display: grid;
+  /* One row, two children stacked in it: the nightbar is an OVERLAY on the
+     sky, not a row beneath it. A second `auto` row here is what used to put a
+     dead black band across the bottom of the window. */
+  grid-template-rows: 1fr;
+  grid-template-columns: 1fr;
+  height: 100%;
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--dome) 0%, var(--void-near) 45%, var(--void-deep) 100%);
+}
+
+.app > * {
+  grid-area: 1 / 1;
+  min-height: 0;
+}
+
+.stage {
+  position: relative;
+  overflow: hidden;
+}
+
+.stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* -- floating panels ----------------------------------------------------- */
+
+/**
+ * ONE card per side, not a stack of them.
+ *
+ * The dock used to be six separate bordered cards with gaps between them,
+ * which meant six borders, six corner radii and six drop edges down each
+ * side of the sky -- a great deal of drawing to say "here are six things".
+ * The dock itself is now the card, and the panels inside it are sections
+ * divided by a single hairline. Same content, a sixth of the chrome.
+ *
+ * This is why `.panel` below sets no background of its own: it is a section
+ * in a column now, and only looks like a card when it is somewhere else.
+ */
+.dock {
+  position: absolute;
+  top: var(--sp-3);
+  bottom: var(--sp-3);
+  width: 352px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 3;
+  border: 1px solid var(--edge-soft);
+  border-radius: var(--r-card);
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--dome) 20%, transparent),
+      transparent 180px
+    ),
+    var(--surface);
+  backdrop-filter: blur(26px) saturate(1.45);
+  -webkit-backdrop-filter: blur(26px) saturate(1.45);
+  /* Content that runs past the cap fades out instead of being sliced through
+     the middle of a word. Where the column ends at its content the fade lands
+     on the last section's own padding and cannot be seen. */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+  /* For `.dock--dimmed`. base.css reduces this to nothing under
+     prefers-reduced-motion, so it needs no guard of its own. */
+  transition: opacity 160ms ease;
+}
+
+/**
+ * Faded by "Hide components" in the bottom bar: down to a hint rather than to
+ * nothing, so it stays obvious that the panels are still there and where they
+ * will come back.
+ *
+ * The blur has to go with it. `backdrop-filter` is what actually hides the sky
+ * behind a dock -- 26px of it -- and it does not scale with opacity: a dock at
+ * 12% still smears everything behind it into a soft grey rectangle, which is
+ * the one thing this button exists to stop. Turning it off is what makes the
+ * sky behind a faded dock sharp.
+ *
+ * Interaction is disabled by `inert` on the element, not here, so the focus
+ * order agrees with the mouse instead of only the mouse being blocked.
+ */
+.dock--dimmed {
+  opacity: 0.12;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Every direct child is a section of the one card: no fill, no border, no
+   radius of its own, and a hairline between it and the last. */
+.dock > * {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: var(--sp-4);
+}
+.dock > * + * {
+  border-top: 1px solid var(--edge-faint);
+}
+
+/**
+ * Both docks are sized BY THEIR CONTENT and capped, never stretched to the
+ * full height. As six separate cards it made no difference -- the gaps were
+ * just sky. As one card it does: a fixed-height column with three sections in
+ * it is a tall empty slab with the sky hidden behind the empty part.
+ *
+ * The cap clears the top bar (48px) and the bottom bar (52px) stacked on the
+ * nightbar (58px), with a gutter either side.
+ */
+.dock--right {
+  top: 60px;
+  bottom: auto;
+  right: var(--sp-3);
+  max-height: calc(100% - 178px);
+}
+
+.dock--left {
+  left: var(--sp-3);
+  width: 320px;
+  bottom: auto;
+  max-height: calc(100% - 178px);
+}
+
+/**
+ * Narrow screens. The two docks are absolutely positioned over the sky, so at
+ * 390px they do not reflow -- they simply sit on top of each other and on the
+ * top bar. Below 760px they stop being columns beside the sky and become one
+ * column down it: the left dock takes a third off the top, the right dock
+ * takes what is left. The doubled `.dock.dock--left` matches the specificity
+ * weather.css uses for the same element, which is the only reason it wins.
+ */
+@media (max-width: 760px) {
+  .dock.dock--left {
+    top: 54px;
+    left: var(--sp-2);
+    width: calc(100% - var(--sp-4));
+    max-height: 38%;
+  }
+  .dock--right {
+    top: calc(38% + 62px);
+    right: var(--sp-2);
+    /* The bottom bar (52px) stacked on the nightbar (52px), plus a gutter. */
+    bottom: 112px;
+    width: calc(100% - var(--sp-4));
+  }
+  /* Nothing is left of the sheet to see at this width, so it fills it. */
+  .setup {
+    padding: var(--sp-2);
+  }
+  .setup__sheet {
+    padding: var(--sp-4) var(--sp-3) var(--sp-3);
+  }
+  .nightbar {
+    padding: 0 var(--sp-2) var(--sp-2);
+    gap: var(--sp-2);
+  }
+}
+
+/**
+ * The card. A hairline and a pane of glass -- that is the whole elevation
+ * system; nothing here casts a shadow.
+ *
+ * The blur is doing two jobs. It buys contrast, because a 12px number over a
+ * star field is unreadable. And it keeps the sky PRESENT: a heavy blur at
+ * moderate opacity still carries the Milky Way's brightness and colour
+ * through the panel, so a card over the galactic centre is visibly warmer
+ * than one over empty sky, and the dock reads as glass laid on the view
+ * rather than a sidebar pasted over it. Raising the opacity instead of the
+ * blur would be easier to read and would lose exactly that.
+ *
+ * The gradient is the same trick: lighter at the top edge, where a real pane
+ * catches the sky, settling to the ground colour by the bottom.
+ */
+/**
+ * A panel is a section of its dock. The card chrome here is the FALLBACK for
+ * a panel used outside one -- the dock's `.dock > *` rule above overrides all
+ * of it, which is what lets the same component be a section in a column and a
+ * card on its own without the component knowing which it is.
+ */
+.panel {
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--dome) 22%, transparent),
+      transparent 40%
+    ),
+    var(--surface);
+  backdrop-filter: blur(26px) saturate(1.45);
+  -webkit-backdrop-filter: blur(26px) saturate(1.45);
+  border: 1px solid var(--edge-soft);
+  border-radius: var(--r-card);
+  padding: var(--sp-3);
+  flex: 0 0 auto;
+}
+
+/* What to do now. A faint accent wash rather than a border, because inside a
+   single column a coloured border would read as a box drawn around a section
+   and we have just spent the whole layout getting rid of those. */
+.dock .panel--now {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--accent) 9%, transparent),
+    transparent
+  );
+}
+
+.panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.panel__body > * + * {
+  margin-top: var(--sp-3);
+}
+
+/**
+ * The disclosure every explanation lives behind. A panel shows the answer;
+ * the working is one click away instead of a paragraph under every number.
+ */
+.more > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  padding: 3px 9px 3px 7px;
+  border-radius: var(--r-control);
+  list-style: none;
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-size: 11.5px;
+  letter-spacing: -0.005em;
+  transition: background 120ms ease, color 120ms ease;
+}
+.more > summary::-webkit-details-marker {
+  display: none;
+}
+.more > summary::before {
+  content: "›";
+  display: inline-block;
+  transition: transform 140ms ease;
+}
+.more[open] > summary::before {
+  transform: rotate(90deg);
+}
+.more > summary:hover {
+  background: var(--control);
+  color: var(--ink);
+}
+.more__body {
+  display: grid;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: var(--r-card);
+  background: var(--well);
+  color: var(--ink-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.collapse {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 2px 0;
+  color: var(--ink-faint);
+}
+.collapse:hover h2 {
+  color: var(--ink);
+}
+
+.collapse__caret {
+  transition: transform 140ms ease;
+}
+.collapse[aria-expanded="true"] .collapse__caret {
+  transform: rotate(90deg);
+}
+
+/* -- chips: a read-only tag, not a control -------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--r-control);
+  border: 1px solid transparent;
+  background: var(--control);
+  font-size: 11px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+.chip--ok {
+  background: var(--control-on);
+  color: var(--accent);
+}
+.chip--warn {
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--warn);
+}
+
+/**
+ * Severity is encoded by TEXTURE as well as colour. That began as a
+ * consequence of the old red-only night mode, where hue was unavailable, and
+ * it is simply good practice independently of it: roughly one man in twelve
+ * cannot reliably separate this rose from this amber.
+ */
+.chip--crit {
+  border-color: color-mix(in srgb, var(--crit) 55%, transparent);
+  color: var(--crit);
+  background-color: color-mix(in srgb, var(--crit) 16%, transparent);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 3px,
+    color-mix(in srgb, var(--crit) 22%, transparent) 3px 4px
+  );
+}
+
+/* -- the now card -------------------------------------------------------- */
+
+.now__target {
+  font-size: 27px;
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+
+.now__do {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+.now__do strong {
+  font-weight: 400;
+  color: var(--accent);
+}
+
+.now__coords {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px var(--sp-2);
+  align-items: center;
+  padding: 10px var(--sp-3);
+  border-radius: var(--r-card);
+  background: var(--well);
+}
+
+.now__coord {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* The small control: copy, close, check now. */
+.copy {
+  padding: 3px 10px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-faint);
+  background: var(--control);
+  color: var(--ink-dim);
+  font-size: 11px;
+  letter-spacing: -0.005em;
+  transition: background 120ms ease, color 120ms ease;
+}
+.copy:hover {
+  background: var(--control-hover);
+  color: var(--ink);
+}
+.copy:active {
+  background: var(--control-active);
+}
+
+.meter {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--edge-faint);
+  overflow: hidden;
+}
+.meter__fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+
+/* -- rows ---------------------------------------------------------------- */
+
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px var(--sp-3);
+  margin: 0;
+  font-size: 12.5px;
+}
+.kv dt {
+  color: var(--ink-faint);
+}
+.kv dd {
+  margin: 0;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.log__item {
+  display: grid;
+  grid-template-columns: 40px 16px 1fr;
+  align-items: start;
+  gap: var(--sp-2);
+  padding: 7px var(--sp-2);
+  border-radius: var(--r-control);
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-dim);
+}
+.log__item:hover {
+  background: var(--surface-raised);
+}
+.log__item--active {
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.log__time {
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+.log__icon {
+  padding-top: 1px;
+}
+.log__item--quiet {
+  color: var(--ink-faint);
+}
+
+/* -- nightbar ------------------------------------------------------------ */
+
+/* Laid over the foot of the sky, not under it: `align-self: end` inside the
+   single grid row the app is. Its own background is nothing at all -- what
+   darkens it is the wash the bottom bar already puts over the horizon. */
+.nightbar {
+  position: relative;
+  /* Above the bottom bar's 5, because that bar's wash reaches down past its
+     own box to cover the foot of the sky -- and would otherwise cover this. */
+  z-index: 6;
+  align-self: end;
+  width: 100%;
+  padding: 0 var(--sp-4) var(--sp-3);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--sp-3);
+  pointer-events: none;
+}
+.nightbar > * {
+  pointer-events: auto;
+}
+
+.nightbar__track {
+  position: relative;
+  height: 40px;
+  border-radius: var(--r-card);
+  border: 1px solid var(--edge-soft);
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+}
+
+/* The night so far: a wash from dusk to the cursor, scaled rather than
+   resized so scrubbing never triggers layout. */
+.nightbar__elapsed {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 14%, transparent));
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* The playhead: a layer as wide as the track, translated by the fraction of
+   the night, carrying the line, a knob and the time. */
+.nightbar__playhead {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+.nightbar__playhead-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: var(--ink);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--void-deep) 70%, transparent);
+}
+.nightbar__playhead-knob {
+  position: absolute;
+  top: -1px;
+  left: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+.nightbar__playhead-tag {
+  position: absolute;
+  top: 20px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--r-control);
+  background: color-mix(in srgb, var(--void-deep) 90%, transparent);
+  border: 1px solid var(--edge-soft);
+  color: var(--ink);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+.nightbar__playhead--flip .nightbar__playhead-tag {
+  left: auto;
+  right: calc(100% + 8px);
+}
+
+.nightbar__marker {
+  position: absolute;
+  bottom: 2px;
+  transform: translateX(-50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--void-deep);
+  pointer-events: none;
+}
+
+/* Alerts ride the top edge, decision points the bottom: two rows, so a
+   forecast update and a cloud warning at the same minute never merge. */
+.nightbar__marker--alert {
+  top: 1px;
+  bottom: auto;
+  border-radius: 1px;
+}
+.nightbar__marker--quiet {
+  background: transparent !important;
+  border-color: var(--ink-faint);
+}
+
+.nightbar__label {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.transport button {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-faint);
+  background: var(--control);
+  color: var(--ink-dim);
+  font-size: 10px;
+  display: grid;
+  place-items: center;
+  transition: background 120ms ease, color 120ms ease;
+}
+.transport button:hover {
+  background: var(--control-hover);
+  color: var(--ink);
+}
+.transport button:active {
+  background: var(--control-active);
+}
+
+/* -- setup --------------------------------------------------------------- */
+
+/**
+ * Where a night begins.
+ *
+ * NOT a card on the sky. It was one, and a bordered sheet floating over a
+ * photograph reads as a dialog interrupting the view -- something to get past
+ * -- when the intent is the opposite: the sky behind the form is the night
+ * you are about to plan, and the form should feel like it is standing in it.
+ *
+ * So there is no box. The sky is dimmed by a scrim that is darkest where the
+ * type sits and clears toward the edges, and the form lies directly on it.
+ * The only boxes on the screen are the fields themselves, which is exactly
+ * where a box means something.
+ *
+ * It starts BELOW the top bar and sits beneath it in the stacking order, so
+ * the header is never covered. That was the other half of the complaint.
+ */
+.setup {
+  position: absolute;
+  inset: 48px 0 0 0;
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  padding: var(--sp-8) var(--sp-6) var(--sp-6);
+  overflow-y: auto;
+  /* Enough to read on, and no more: the sky is meant to stay visible behind
+     the form, because it is the night being planned. The blur does most of
+     the work so the scrim itself can stay light.
+
+     Measured, not guessed. The floor is the 12px `--ink-faint` notes and the
+     target rows' meta line, which are the faintest type on the sheet and sit
+     over the brightest thing behind it -- the Milky Way through the middle of
+     the gradient. Measured on the rendered page, the worst of them is
+     "following tonight's picks" at 4.9:1 and a target's meta line at 5.0:1,
+     so there is still a margin over the 4.5:1 floor `--ink-faint` was lifted
+     to clear in the first place. The BLUR is the bigger lever here, not the
+     gradient: dropping it from 6px to 4px is most of what brings the stars
+     and the Milky Way back, because the alpha barely moves the mean while
+     the blur decides whether there is any detail left to see. Lighten either
+     further and the faint notes are what goes first; re-measure rather than
+     assume. */
+  background:
+    radial-gradient(
+      120% 75% at 50% 36%,
+      color-mix(in srgb, var(--void-deep) 60%, transparent) 0%,
+      color-mix(in srgb, var(--void-deep) 48%, transparent) 50%,
+      color-mix(in srgb, var(--void-deep) 16%, transparent) 100%
+    );
+  backdrop-filter: blur(4px) saturate(1.28);
+  -webkit-backdrop-filter: blur(4px) saturate(1.28);
+}
+
+.setup__sheet {
+  width: min(880px, 100%);
+  padding: 0 0 var(--sp-8);
+}
+
+.setup__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--sp-3) var(--sp-4);
+}
+
+.field label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: -0.005em;
+  color: var(--ink-dim);
+  margin-bottom: 6px;
+}
+
+.field__hint {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-faint);
+  margin-top: 5px;
+}
+
+.targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The interactive toggle. A filled control that takes an accent wash AND an
+   accent hairline when it is on -- readable as "chosen" without reading the
+   text, which a border-colour change on its own never quite is. */
+.target-toggle {
+  padding: 5px 12px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-faint);
+  background: var(--control);
+  color: var(--ink-dim);
+  font-size: 12px;
+  letter-spacing: -0.005em;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.target-toggle:hover {
+  background: var(--control-hover);
+  color: var(--ink);
+}
+.target-toggle:active {
+  background: var(--control-active);
+}
+.target-toggle[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--control-on);
+  color: var(--accent);
+}
+
+/**
+ * The one accent control per surface: the action that changes the night.
+ *
+ * Accent rather than white, for two reasons. White-on-near-black at this size
+ * reads as a marketing CTA, which is the register we are getting away from.
+ * And the accent is already the colour the plan itself is drawn in up in the
+ * sky -- pressing this is how that cyan appears, so the button may as well be
+ * the colour of the thing it makes.
+ */
+.primary {
+  padding: 10px 22px;
+  border-radius: var(--r-control);
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--void-deep);
+  font-size: 13.5px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition: background 120ms ease;
+}
+.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, var(--ink));
+}
+.primary:active:not(:disabled) {
+  background: var(--accent-deep);
+}
+.primary:disabled {
+  background: var(--control);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.ghost {
+  padding: 9px 16px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-faint);
+  background: var(--control);
+  color: var(--ink-dim);
+  font-size: 13px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.ghost:hover {
+  background: var(--control-hover);
+  color: var(--ink);
+}
+.ghost:active {
+  background: var(--control-active);
+}
+
+/* -- misc ---------------------------------------------------------------- */
+
+/* The sky's own chrome -- labels, reticle, top and bottom bars -- lives in
+   sky-chrome.css. */
+
+/* -- object inspector ---------------------------------------------------- */
+
+.inspect__thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--r-card);
+  object-fit: cover;
+  background: var(--void-deep);
+  border: 1px solid var(--edge-faint);
+  display: block;
+}
+
+.inspect__track {
+  position: relative;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--void-deep);
+  overflow: hidden;
+  border: 1px solid var(--edge-faint);
+}
+
+.inspect__span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.banner {
+  position: absolute;
+  top: var(--sp-3);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  background: var(--surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.spread {
+  justify-content: space-between;
+}
+
+/* A link that is a footnote rather than a control: the catalogue notice. */
+.specs__notice {
+  color: var(--ink-dim);
+  text-decoration: none;
+  border-bottom: 1px solid var(--edge-soft);
+}
+.specs__notice:hover {
+  color: var(--ink);
+  border-bottom-color: var(--edge);
+}
+
+/* -- modal --------------------------------------------------------------- */
+
+/**
+ * For the one question that has to be answered before anything else happens --
+ * "this cannot be scheduled, here is the server's reason". Card chrome over a
+ * scrim; the scrim, not a shadow, is what lifts it off the sky.
+ */
+.modal__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-6);
+  background: color-mix(in srgb, var(--void-deep) 72%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: modal-scrim-in 140ms ease-out;
+}
+
+.modal__sheet {
+  width: min(420px, 100%);
+  max-height: calc(100% - var(--sp-8));
+  overflow-y: auto;
+  padding: var(--sp-4);
+  border-radius: var(--r-card);
+  border: 1px solid var(--edge-soft);
+  background: var(--surface);
+  backdrop-filter: blur(24px) saturate(1.15);
+  -webkit-backdrop-filter: blur(24px) saturate(1.15);
+  animation: modal-sheet-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.modal__title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.modal__body {
+  margin-top: var(--sp-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+.modal__body > * + * {
+  margin-top: 6px;
+}
+
+/* Dismiss on the left as a .ghost, the one affirmative action on the right as
+   the .primary. The same shape as every other action row here. */
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+
+@keyframes modal-scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes modal-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.99);
+  }
+}

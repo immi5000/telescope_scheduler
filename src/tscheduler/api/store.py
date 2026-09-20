@@ -13,6 +13,11 @@ and a status; the client responds by re-fetching through the same REST
 endpoints a replay scrub uses. One fetching path, one cache, one set of types --
 and the entire push layer can be replaced by a 15-second poll without touching
 a single component.
+
+**A night that is still happening is watched.** After its fold, the store runs
+one task per live session that checks for new data every few minutes until
+dawn (``api/live.py``). The tasks are the store's to cancel: on delete, and
+when the app shuts down.
 """
 
 from __future__ import annotations
@@ -22,8 +27,10 @@ import contextlib
 import threading
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any
 
+from tscheduler.api import live
 from tscheduler.api.session import NightSession, SessionStatus, fold_night
 
 MAX_QUEUE = 256
@@ -74,11 +81,13 @@ class EventBus:
 
 
 class SessionStore:
-    def __init__(self, bus: EventBus) -> None:
+    def __init__(self, bus: EventBus, *, live_every: timedelta | None = None) -> None:
         self._sessions: dict[str, NightSession] = {}
         self._order: list[str] = []
         self._bus = bus
         self._lock = threading.Lock()
+        self._live_every = live_every if live_every and live_every > timedelta(0) else None
+        self._watches: dict[str, asyncio.Task[None]] = {}
 
     def __len__(self) -> int:
         with self._lock:
@@ -98,6 +107,9 @@ class SessionStore:
                 return False
             del self._sessions[session_id]
             self._order.remove(session_id)
+            task = self._watches.pop(session_id, None)
+        if task is not None:
+            task.cancel()
         return True
 
     def add(self, session: NightSession) -> None:
@@ -144,6 +156,9 @@ class SessionStore:
         await loop.run_in_executor(None, lambda: fold_night(session, on_progress=on_progress))
 
         if session.status == SessionStatus.READY:
+            # Before the ready event, so the payload a client fetches in
+            # response already says it is being watched.
+            self.watch(session)
             self._bus.publish(
                 {
                     "type": "session.ready",
@@ -157,3 +172,75 @@ class SessionStore:
             self._bus.publish(
                 {"type": "session.failed", "sessionId": session.id, "error": session.error}
             )
+
+    # -- the live watch --------------------------------------------------------
+
+    def watch(self, session: NightSession) -> None:
+        """Start keeping a live night current. A no-op for a replay.
+
+        The watch is attached even with scheduled checks off, so a manual
+        refresh still works and the payload still says the night is live.
+        """
+        if live.attach_watch(session, self._live_every) is None or self._live_every is None:
+            return
+        with self._lock:
+            if session.id in self._watches or session.id not in self._sessions:
+                return
+            task = asyncio.get_running_loop().create_task(
+                self._follow(session), name=f"live-watch-{session.id}"
+            )
+            self._watches[session.id] = task
+
+        def forget(t: asyncio.Task[None]) -> None:
+            with self._lock:
+                if self._watches.get(session.id) is t:
+                    del self._watches[session.id]
+
+        task.add_done_callback(forget)
+
+    async def _follow(self, session: NightSession) -> None:
+        every = self._live_every
+        watch = session.live
+        if every is None or watch is None:
+            return
+        while watch.following:
+            await asyncio.sleep(every.total_seconds())
+            if self.get(session.id) is not session:
+                return
+            await self.check(session)
+
+    async def check(self, session: NightSession, *, manual: bool = False) -> live.CheckOutcome:
+        """One check, off the event loop -- it may fetch and run CP-SAT."""
+        loop = asyncio.get_running_loop()
+        before = len(session.decision_points)
+        outcome = await loop.run_in_executor(None, lambda: live.check_now(session, manual=manual))
+        if outcome is live.CheckOutcome.UPDATED:
+            dps = session.decision_points
+            # Appended points, or -- before dusk, where the opening plan is
+            # re-made in place -- that one.
+            for dp in dps[before:] or dps[:1]:
+                self._bus.publish(
+                    {
+                        "type": "plan.available",
+                        "sessionId": session.id,
+                        "decisionIndex": dp.index,
+                        "at": dp.at.isoformat(),
+                        "planId": dp.plan_id,
+                    }
+                )
+        if outcome not in (live.CheckOutcome.BUSY, live.CheckOutcome.TOO_SOON):
+            self._bus.publish(
+                {"type": "session.live", "sessionId": session.id, "outcome": outcome.value}
+            )
+        return outcome
+
+    async def close(self) -> None:
+        """Cancel every watch. Called once, when the app shuts down."""
+        with self._lock:
+            tasks = list(self._watches.values())
+            self._watches.clear()
+        for t in tasks:
+            t.cancel()
+        for t in tasks:
+            with contextlib.suppress(asyncio.CancelledError):
+                await t

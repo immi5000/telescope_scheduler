@@ -15,6 +15,7 @@ message and serve the cached copy instead.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -79,6 +80,18 @@ class CelesTrakProvider(SatelliteElementsProvider):
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         return self._cache_dir / f"celestrak_{group}.tle"
 
+    def _stamp_path(self, group: str) -> Path | None:
+        """Where the cached copy's DOWNLOAD instant is recorded.
+
+        It gets its own file because the alternative -- reading the payload's
+        mtime -- substitutes a *retrieval* fact for a *publication* fact, and
+        those are two of the three timestamps this system refuses to conflate.
+        An mtime also changes for reasons that have nothing to do with the
+        data: a copy, a restore, a checkout.
+        """
+        path = self._cache_path(group)
+        return None if path is None else path.with_suffix(".stamp.json")
+
     def _fetch(self, query: TleQuery, as_of: AsOf) -> Sequence[Record[TleRecord]]:
         if as_of.vantage is Vantage.REPLAY:
             raise ValueError(
@@ -140,6 +153,9 @@ class CelesTrakProvider(SatelliteElementsProvider):
         path = self._cache_path(query.group)
         if path is not None:
             path.write_text(r.text)
+        stamp = self._stamp_path(query.group)
+        if stamp is not None:
+            stamp.write_text(json.dumps({"downloaded_at": as_of.t.isoformat()}))
         self._mem[query.group] = (as_of.t, records)
         return as_of.t, records
 
@@ -152,10 +168,32 @@ class CelesTrakProvider(SatelliteElementsProvider):
         if path is not None and path.exists():
             records = parse_tle_text(path.read_text())
             if records:
-                mtime = datetime.fromtimestamp(path.stat().st_mtime, UTC)
-                self._mem[query.group] = (mtime, records)
-                return mtime, records
+                when = self._cached_download_time(query.group, path)
+                self._mem[query.group] = (when, records)
+                return when, records
         return None
+
+    def _cached_download_time(self, group: str, payload: Path) -> datetime:
+        """When the cached copy was actually downloaded.
+
+        Falls back to the payload's mtime when no stamp exists -- a file
+        written by an older build, or copied in by hand. That fallback is
+        deliberately NOT clamped to ``as_of``: if we cannot prove when these
+        elements became knowable, the honest answer is the latest instant they
+        might have, and letting the publication gate refuse them is the correct
+        outcome. Clamping would manufacture provenance to make an assertion
+        pass, which is the one thing this layer must never do.
+        """
+        stamp = self._stamp_path(group)
+        if stamp is not None and stamp.exists():
+            try:
+                raw = json.loads(stamp.read_text())["downloaded_at"]
+                when = datetime.fromisoformat(raw)
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+            else:
+                return when if when.tzinfo is not None else when.replace(tzinfo=UTC)
+        return datetime.fromtimestamp(payload.stat().st_mtime, UTC)
 
     def coverage_key(self, query: TleQuery) -> str:
         return f"celestrak:{query.group}"

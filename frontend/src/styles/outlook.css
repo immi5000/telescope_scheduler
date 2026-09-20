@@ -1,0 +1,81 @@
+/* The outlook half of the weather box. No colour literals -- see base.css.
+   There is no longer an Outlook panel: these classes are rendered inside
+   `.wx` (see weather.css), under its "Tonight" eyebrow. Every rule here is
+   unscoped, which is why the move cost nothing. */
+
+.outlook__headline {
+  font-size: 14px;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.outlook__verdict {
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.outlook__strip {
+  display: block;
+  width: 100%;
+  height: 22px;
+  border-bottom: 1px solid var(--edge-faint);
+}
+
+.outlook__bar {
+  fill: var(--ink-dim);
+}
+
+/* Before the plan's decision point: history, which the outlook no longer
+   summarises. */
+.outlook__bar--past {
+  fill: var(--ink-faint);
+}
+
+/* No forecast reaches this slot: a stub, not a short "clear" bar. */
+.outlook__bar--none {
+  fill: var(--ink-faint);
+  opacity: 0.45;
+}
+
+.outlook__best {
+  fill: color-mix(in srgb, var(--accent) 16%, transparent);
+  stroke: var(--accent-deep);
+  stroke-width: 0.3;
+  vector-effect: non-scaling-stroke;
+}
+
+.outlook__notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+.outlook__note {
+  position: relative;
+  padding-left: 13px;
+}
+
+.outlook__note::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+.outlook__note--warn::before {
+  background: var(--warn);
+}
+
+.outlook__note--critical::before {
+  background: var(--crit);
+}

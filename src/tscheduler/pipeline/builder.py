@@ -5,13 +5,23 @@ The layer split that makes re-planning fast lives here:
   GEOMETRY   as_of-INDEPENDENT. Site + date + coordinates only. Computed once
              per session (~250 ms) and reused by every re-plan and all three
              comparison arms.
-  CONDITIONS as_of-DEPENDENT. Pure numpy over the geometry, ~5 ms.
+  CONDITIONS as_of-DEPENDENT. Pure numpy over the geometry, ~5 ms. Built in
+             ``pipeline/conditions.py``, which keeps the sky decomposition and
+             the named preference factors this module used to discard.
+  SATELLITES as_of-DEPENDENT but SLOW, so it is cached separately rather than
+             rebuilt per decision point. Not yet wired; see the plan's Stage 3.
 
 A re-plan therefore never touches astropy.
+
+``build_scheduler_input`` is now a thin adapter: it calls ``build_conditions``
+and then ``scheduler_input_from``. The signature is unchanged on purpose --
+seven callers and two test modules depend on it, and a refactor that also
+moves a call site is a refactor you cannot bisect.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -23,9 +33,8 @@ from tscheduler.domain.equipment import Camera, Mount, Optics
 from tscheduler.domain.site import Site
 from tscheduler.domain.targets import Target
 from tscheduler.physics.geometry import NightGeometry, build_night_geometry
-from tscheduler.physics.quality import efficiency, preference
-from tscheduler.physics.satellites import NullSatelliteRisk, SatelliteRiskModel
-from tscheduler.physics.sky import sky_brightness
+from tscheduler.physics.satellites import SatelliteRiskModel
+from tscheduler.pipeline.conditions import ConditionsLayer, build_conditions
 from tscheduler.providers.base import EvidenceLedger
 from tscheduler.providers.weather.base import WeatherForecastProvider
 from tscheduler.providers.weather.model import WeatherQuery
@@ -40,13 +49,24 @@ class SessionSpec:
     camera: Camera
     mount: Mount
     targets: tuple[Target, ...]
-    snr_goal: float = 20.0
+    snr_goal: float = 15.0
     t_sub_s: float = 90.0
 
     @property
     def fov_deg2(self) -> float:
         w, h = self.camera.fov_deg(self.optics)
         return w * h
+
+
+def min_block_slots(min_block_minutes: float, slot_minutes: float) -> int:
+    """The minimum block in whole slots, rounded UP.
+
+    It is the shortest visit the observer asked for, so it may not come out
+    shorter: 20 minutes on 15-minute slots is two slots, not one, and 15
+    minutes on 2-minute slots is eight, not seven. The epsilon keeps an exact
+    multiple (20 on 5) from rounding up on float noise.
+    """
+    return max(math.ceil(min_block_minutes / slot_minutes - 1e-9), 1)
 
 
 def build_geometry(spec: SessionSpec) -> NightGeometry:
@@ -67,99 +87,60 @@ def build_scheduler_input(
     satellite_risk: SatelliteRiskModel | None = None,
 ) -> tuple[SchedulerInput, EvidenceLedger]:
     """The as_of-dependent half. Pure numpy once the forecast is in hand."""
-    grid = spec.grid
-    n_t, n_s = len(spec.targets), grid.n_slots
-
-    q = WeatherQuery(
-        lat=spec.site.latitude_deg,
-        lon=spec.site.longitude_deg,
-        valid_from=grid.start,
-        valid_to=grid.end,
+    cond = build_conditions(spec, geo, weather, as_of, satellite_risk=satellite_risk)
+    inp = scheduler_input_from(
+        spec,
+        geo,
+        cond,
+        previous_plan=previous_plan,
+        locked=locked,
+        locked_observing=locked_observing,
+        first_free_slot=first_free_slot,
     )
-    cloud, seeing, ledger = weather.series(q, as_of, grid)
+    return inp, cond.ledger
 
-    # Streak risk is expected illuminated trails per exposure. It enters ONLY
-    # the preference term, never efficiency: a streak is mitigated in
-    # post-processing by sigma-clipping, so it is a cost to be weighed rather
-    # than signal that was never collected.
-    risk = satellite_risk or NullSatelliteRisk()
-    slots = np.arange(n_s, dtype=np.int64)
-    fov = spec.fov_deg2
 
-    eta = np.zeros((n_t, n_s))
-    pref = np.zeros((n_t, n_s))
-    need = np.zeros(n_t)
-    subs = np.zeros((n_t, n_s), dtype=np.int64)
-    per_slot_subs = max(int(grid.slot_seconds // (spec.t_sub_s + spec.camera.readout_s)), 1)
+def scheduler_input_from(
+    spec: SessionSpec,
+    geo: NightGeometry,
+    cond: ConditionsLayer,
+    *,
+    previous_plan: dict[int, str | None] | None = None,
+    locked: dict[int, str | None] | None = None,
+    locked_observing: frozenset[int] | None = None,
+    first_free_slot: int = 0,
+) -> SchedulerInput:
+    """Project a conditions layer onto exactly what the optimizer reads.
 
-    for i, tgt in enumerate(spec.targets):
-        sky = sky_brightness(
-            target_altitude_deg=geo.altitude_deg[i],
-            target_azimuth_deg=geo.azimuth_deg[i],
-            moon_altitude_deg=geo.moon_altitude_deg,
-            moon_separation_deg=geo.moon_separation_deg[i],
-            moon_phase_angle_deg=geo.moon_phase_angle_deg,
-            sun_altitude_deg=geo.sun_altitude_deg,
-            cloud_fraction=cloud,
-            natural_zenith_mag_arcsec2=spec.site.natural_zenith_mag_arcsec2,
-            artificial_zenith_nl=spec.site.artificial_zenith_nl,
-            extinction_k=spec.site.extinction_k,
-        )
-        e, rho_ref = efficiency(
-            target_magnitude=tgt.magnitude,
-            airmass=geo.airmass[i],
-            sky_mag_arcsec2=sky.total_mag_arcsec2,
-            seeing_fwhm_arcsec=seeing,
-            cloud_fraction=cloud,
-            optics=spec.optics,
-            camera=spec.camera,
-            t_sub_s=spec.t_sub_s,
-            extinction_k=spec.site.extinction_k,
-        )
-        eta[i] = np.where(geo.visible[i], e, 0.0)
-        streak = risk.streak_rate_per_min(geo.altitude_deg[i], geo.azimuth_deg[i], slots, fov) * (
-            spec.t_sub_s / 60.0
-        )
-        pref[i] = preference(
-            altitude_deg=geo.altitude_deg[i],
-            moon_separation_deg=geo.moon_separation_deg[i],
-            cloud_fraction=cloud,
-            seeing_fwhm_arcsec=seeing,
-            satellite_risk=streak,
-            min_altitude_deg=spec.site.min_altitude_deg,
-            min_moon_separation_deg=spec.site.min_moon_separation_deg,
-        )["total"]
-        goal = tgt.snr_goal if tgt.snr_goal is not None else spec.snr_goal
-        need[i] = (goal**2) / rho_ref if rho_ref > 0 else np.inf
-        subs[i] = per_slot_subs
-
-    # inf would overflow the integer objective scaling; a large finite value is
-    # equivalent (such a target is unschedulable either way) and stays safe.
-    need = np.where(np.isfinite(need), need, 1e12)
-
-    inp = SchedulerInput(
+    Kept separate from ``build_conditions`` because re-scoring an existing plan
+    under new conditions needs the layer but not the model, and re-solving with
+    different locks needs the model but not a rebuilt layer.
+    """
+    grid = spec.grid
+    n_t = len(spec.targets)
+    return SchedulerInput(
         grid=grid,
         target_ids=tuple(t.id for t in spec.targets),
-        eta=eta,
-        preference=pref,
+        eta=cond.eta,
+        preference=cond.preference,
         visible=geo.visible,
-        required_ref_seconds=need,
+        required_ref_seconds=cond.required_ref_seconds,
         weight=np.array([t.weight for t in spec.targets], dtype=float),
-        subs_per_slot=subs,
+        subs_per_slot=cond.subs_per_slot,
         t_sub_s=np.full(n_t, spec.t_sub_s),
         snr_goal=np.array(
             [t.snr_goal if t.snr_goal is not None else spec.snr_goal for t in spec.targets],
             dtype=float,
         ),
+        readout_s=np.full(n_t, spec.camera.readout_s),
         switch_slots=grid.minutes_to_slots(spec.mount.switch_minutes),
         switch_remainder=grid.fractional_remainder(spec.mount.switch_minutes),
-        min_block_slots=max(int(spec.mount.min_block_minutes // grid.slot_minutes), 1),
+        min_block_slots=min_block_slots(spec.mount.min_block_minutes, grid.slot_minutes),
         locked=locked or {},
         locked_observing=locked_observing,
         previous_plan=previous_plan or {},
         first_free_slot=first_free_slot,
     )
-    return inp, ledger
 
 
 def conditions_arrays(

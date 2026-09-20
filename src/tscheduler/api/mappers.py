@@ -13,12 +13,17 @@ from datetime import UTC, datetime
 import numpy as np
 from numpy.typing import NDArray
 
-from tscheduler.api import schemas
-from tscheduler.api.presets import CATALOG, EquipmentPreset, SitePreset
+from tscheduler.api import amend, equipment, outlook, presets, schemas
+from tscheduler.api.equipment import EquipmentPreset
+from tscheduler.api.live import live_out
+from tscheduler.api.presets import SitePreset
 from tscheduler.api.session import DecisionPoint, NightSession
+from tscheduler.core.hashing import hash_arrays
 from tscheduler.domain.plan import SlotKind
 from tscheduler.physics.convert import mag_arcsec2_to_nl, nl_to_mag_arcsec2
 from tscheduler.physics.geometry import NightGeometry
+from tscheduler.pipeline.conditions import PREFERENCE_FACTORS, SKY_COMPONENTS
+from tscheduler.scheduling.cpsat import listed_ref_seconds
 
 COMPASS = (
     "N",
@@ -107,44 +112,15 @@ def site_out(p: SitePreset) -> schemas.SitePresetOut:
         extinction_k=p.extinction_k,
         artificial_zenith_nl=_f(site.artificial_zenith_nl, 2),
         zenith_sky_mag_arcsec2=_f(nl_to_mag_arcsec2(total_nl), 2),
+        min_altitude_deg=p.min_altitude_deg,
+        min_moon_separation_deg=p.min_moon_separation_deg,
     )
 
 
-def equipment_out(p: EquipmentPreset) -> schemas.EquipmentPresetOut:
-    w, h = p.fov_deg
-    return schemas.EquipmentPresetOut(
-        id=p.id,
-        name=p.name,
-        aperture_mm=p.optics.aperture_mm,
-        focal_length_mm=p.optics.focal_length_mm,
-        focal_ratio=_f(p.optics.focal_ratio, 2),
-        collecting_area_cm2=_f(p.optics.collecting_area_cm2, 1),
-        throughput=p.optics.throughput,
-        pixel_size_um=p.camera.pixel_size_um,
-        pixel_scale_arcsec=_f(p.pixel_scale_arcsec, 3),
-        fov_width_deg=_f(w, 4),
-        fov_height_deg=_f(h, 4),
-        read_noise_e=p.camera.read_noise_e,
-        dark_current_e_per_s=p.camera.dark_current_e_per_s,
-        quantum_efficiency=p.camera.quantum_efficiency,
-        switch_minutes=p.mount.switch_minutes,
-        min_block_minutes=p.mount.min_block_minutes,
-    )
-
-
-def catalog_out() -> list[schemas.CatalogEntryOut]:
-    return [
-        schemas.CatalogEntryOut(
-            id=tid,
-            name=name,
-            ra_deg=ra,
-            dec_deg=dec,
-            ra=ra_sexagesimal(ra),
-            dec=dec_sexagesimal(dec),
-            magnitude=mag,
-        )
-        for tid, name, ra, dec, mag in CATALOG
-    ]
+def equipment_out(p: EquipmentPreset) -> schemas.EquipmentOut:
+    """Lives with the presets in ``api/equipment.py``; kept here by name because
+    this module is where every other wire mapping is looked for."""
+    return equipment.equipment_out(p)
 
 
 # --------------------------------------------------------------------------
@@ -202,21 +178,37 @@ def moon_out(geo: NightGeometry) -> schemas.MoonOut:
     )
 
 
+def _first_last(mask: NDArray[np.bool_]) -> tuple[int | None, int | None]:
+    idx = np.flatnonzero(mask)
+    return (int(idx[0]), int(idx[-1])) if idx.size else (None, None)
+
+
 def targets_out(sess: NightSession) -> list[schemas.TargetOut]:
     geo = sess.geometry
     dps = sess.decision_points
     out: list[schemas.TargetOut] = []
     for i, t in enumerate(sess.spec.targets):
         need_min = 0.0
-        if dps:
+        # Bounds-checked rather than indexed directly. Targets are appended to
+        # a session when an alert is accepted, and the decision points built
+        # before that append know nothing about the new row -- so this would
+        # raise IndexError on the very next GET, from a line that looks
+        # perfectly safe.
+        if dps and i < len(dps[0].inp.required_ref_seconds):
             need_min = float(dps[0].inp.required_ref_seconds[i]) / 60.0
         vis = 0
         alt_max = 0.0
         transit: int | None = None
+        rise: int | None = None
+        sets: int | None = None
+        first_usable: int | None = None
+        last_usable: int | None = None
         if geo is not None:
             vis = int(geo.visible[i].sum())
             alt_max = float(np.max(geo.altitude_deg[i]))
             transit = int(np.argmax(geo.altitude_deg[i]))
+            rise, sets = _first_last(geo.altitude_deg[i] > 0.0)
+            first_usable, last_usable = _first_last(geo.visible[i])
         out.append(
             schemas.TargetOut(
                 id=t.id,
@@ -226,6 +218,7 @@ def targets_out(sess: NightSession) -> list[schemas.TargetOut]:
                 ra=ra_sexagesimal(t.ra_deg),
                 dec=dec_sexagesimal(t.dec_deg),
                 magnitude=t.magnitude,
+                is_point_source=t.is_point_source,
                 priority=t.priority,
                 urgency=t.urgency,
                 snr_goal=t.snr_goal if t.snr_goal is not None else sess.spec.snr_goal,
@@ -233,6 +226,10 @@ def targets_out(sess: NightSession) -> list[schemas.TargetOut]:
                 visible_slots=vis,
                 max_altitude_deg=_f(alt_max, 2),
                 transit_slot=transit,
+                rise_slot=rise,
+                set_slot=sets,
+                first_usable_slot=first_usable,
+                last_usable_slot=last_usable,
             )
         )
     return out
@@ -242,6 +239,11 @@ def decision_point_out(dp: DecisionPoint) -> schemas.DecisionPointOut:
     return schemas.DecisionPointOut(
         index=dp.index,
         at=dp.at,
+        # The fold re-plans at dusk and at each forecast publication; the only
+        # other re-plans are the observer's own, adding a target.
+        kind="amend"
+        if amend.is_amendment(dp.reason)
+        else ("start" if dp.index == 0 else "weather"),
         reason=dp.reason,
         plan_id=dp.plan_id,
         records_known=len(dp.plan.ledger.refs),
@@ -269,11 +271,14 @@ def session_out(sess: NightSession) -> schemas.SessionOut:
             start=grid.start,
             end=grid.end,
             slot_minutes=grid.slot_minutes,
+            slot_seconds=grid.slot_seconds,
             n_slots=grid.n_slots,
             slot_starts=grid.starts(),
+            slot_mids=grid.mids(),
         ),
         targets=targets_out(sess),
         weather_source=sess.weather_source,
+        weather=outlook.weather_source_out(sess),
         sun_altitude_deg=_fl(geo.sun_altitude_deg if geo else empty, 2),
         twilight=twilight_bands(sess, geo) if geo else [],
         moon=moon_out(geo)
@@ -291,6 +296,7 @@ def session_out(sess: NightSession) -> schemas.SessionOut:
         distinct_plans=sess.distinct_plans,
         fold_seconds=_f(sess.fold_seconds, 2),
         error=sess.error,
+        live=live_out(sess),
     )
 
 
@@ -321,6 +327,7 @@ def _block_warnings(
         out.append(
             schemas.WarningOut(
                 severity="critical",
+                category="exposure",
                 text=f"only {n_subs} sub-exposures in this block",
                 action="shorten the sub or extend the block - sigma-clipping needs 9+ frames "
                 "to reject satellite trails and cosmic rays",
@@ -330,6 +337,7 @@ def _block_warnings(
         out.append(
             schemas.WarningOut(
                 severity="warn",
+                category="horizon",
                 text=f"drops to {alt_min:.0f}° altitude",
                 action="check for trees and roofline before you start; expect softer stars "
                 "in the frames nearest the horizon",
@@ -340,6 +348,7 @@ def _block_warnings(
         out.append(
             schemas.WarningOut(
                 severity="warn" if mean_cloud < 0.7 else "critical",
+                category="weather",
                 text=f"{pct}% forecast cloud over this block",
                 action=f"expect to sigma-clip roughly {pct}% of the frames; keep shooting "
                 "rather than stopping - the clip needs the frame count",
@@ -349,6 +358,7 @@ def _block_warnings(
         out.append(
             schemas.WarningOut(
                 severity="info",
+                category="moon",
                 text=f"Moon {moon_sep_min:.0f}° away at the closest",
                 action="expect a gradient across the frame; dither and use a gradient "
                 "removal step in post",
@@ -427,15 +437,18 @@ def blocks_out(sess: NightSession, dp: DecisionPoint) -> list[schemas.BlockOut]:
 
 def progress_out(sess: NightSession, dp: DecisionPoint) -> list[schemas.TargetProgressOut]:
     """Accumulated reference-seconds per target, which is the honest measure of
-    'how done is it' -- wall minutes on a bad slot are not progress."""
+    'how done is it' -- wall minutes on a bad slot are not progress.
+
+    Counted over the frames the blocks list, as their expected SNRs are, so
+    the bar and the cards agree: the blocks' SNRs sum in quadrature to this."""
     inp = dp.inp
-    grid = sess.spec.grid
+    listed = listed_ref_seconds(inp, dp.plan.assignments)
     out: list[schemas.TargetProgressOut] = []
     for i, tid in enumerate(inp.target_ids):
         slots = [
             a.slot for a in dp.plan.assignments if a.target_id == tid and a.kind is SlotKind.OBSERVE
         ]
-        acc = float(sum(inp.eta[i, s] for s in slots)) * grid.slot_seconds
+        acc = float(listed[i])
         need = float(inp.required_ref_seconds[i])
         goal = float(inp.snr_goal[i]) if inp.snr_goal is not None else sess.spec.snr_goal
         frac = acc / need if need > 0 else 0.0
@@ -526,32 +539,84 @@ def plan_out(sess: NightSession, index: int) -> schemas.PlanOut:
             past_slots_rewritten=dp.past_slots_rewritten,
             headline=_headline(dp),
         ),
+        outlook=outlook.outlook_out(sess, dp),
+        slot_weather=outlook.slot_weather_out(sess, dp),
     )
 
 
 # --------------------------------------------------------------------------
-# quality grid
+# geometry -- the as_of-INDEPENDENT half
+# --------------------------------------------------------------------------
+
+
+def geometry_id(geo: NightGeometry) -> str:
+    """Content hash over every geometry array.
+
+    Used as the ETag. It is a hash of the arrays rather than of the session id
+    because two sessions at the same site on the same night with the same
+    targets genuinely have the same geometry, and should share a cache entry.
+    """
+    return hash_arrays(geo.arrays())[:16]
+
+
+def geometry_out(sess: NightSession) -> schemas.GeometryOut:
+    geo = sess.geometry
+    assert geo is not None
+    grid = sess.spec.grid
+    return schemas.GeometryOut(
+        session_id=sess.id,
+        geometry_id=geometry_id(geo),
+        n_slots=grid.n_slots,
+        slot_mids=grid.mids(),
+        lst_hours=_fl(geo.lst_hours, 6),
+        # Six decimals is ~0.2 arcsec of orientation. Four would be 20 arcsec,
+        # comparable to the aberration floor this rotation already carries, and
+        # would show up as a visible per-slot jitter in the horizon.
+        frame_quat=[[_f(v, 6) for v in q] for q in geo.frame_quat],
+        sun_altitude_deg=_fl(geo.sun_altitude_deg, 3),
+        sun_azimuth_deg=_fl(geo.sun_azimuth_deg, 3),
+        moon=moon_out(geo),
+        rows=[
+            schemas.GeometryRowOut(
+                target_id=t.id,
+                name=t.name,
+                ra_deg=t.ra_deg,
+                dec_deg=t.dec_deg,
+                altitude_deg=_fl(geo.altitude_deg[i], 3),
+                azimuth_deg=_fl(geo.azimuth_deg[i], 3),
+                airmass=_fl(geo.airmass[i], 3),
+                moon_separation_deg=_fl(geo.moon_separation_deg[i], 2),
+                visible=[bool(v) for v in geo.visible[i]],
+            )
+            for i, t in enumerate(sess.spec.targets)
+        ],
+    )
+
+
+# --------------------------------------------------------------------------
+# quality grid -- the as_of-DEPENDENT half
 # --------------------------------------------------------------------------
 
 
 def quality_grid_out(sess: NightSession, index: int) -> schemas.QualityGridOut:
     dp = sess.decision_points[index]
-    geo = sess.geometry
-    assert geo is not None
-    inp = dp.inp
+    cond = dp.conditions
     rows = [
         schemas.GridRowOut(
             target_id=tid,
             name=sess.spec.targets[i].name,
-            efficiency=_fl(inp.eta[i], 4),
-            preference=_fl(inp.preference[i], 4),
-            altitude_deg=_fl(geo.altitude_deg[i], 2),
-            azimuth_deg=_fl(geo.azimuth_deg[i], 2),
-            airmass=_fl(geo.airmass[i], 3),
-            moon_separation_deg=_fl(geo.moon_separation_deg[i], 2),
-            visible=[bool(v) for v in geo.visible[i]],
+            efficiency=_fl(cond.eta[i], 4),
+            preference=_fl(cond.preference[i], 4),
+            preference_factors={
+                k: _fl(cond.preference_factors[k][i], 4) for k in PREFERENCE_FACTORS
+            },
+            sky_mag_arcsec2=_fl(cond.sky_mag_arcsec2[i], 3),
+            # Two decimals of nanoLamberts: a pristine zenith is ~54 nL and the
+            # faintest component worth drawing is ~0.1 nL, so this is three
+            # significant figures where it matters and short on the wire.
+            sky_components_nl={k: _fl(cond.sky_components_nl[k][i], 2) for k in SKY_COMPONENTS},
         )
-        for i, tid in enumerate(inp.target_ids)
+        for i, tid in enumerate(dp.inp.target_ids)
     ]
     return schemas.QualityGridOut(
         session_id=sess.id,
@@ -566,3 +631,38 @@ def quality_grid_out(sess: NightSession, index: int) -> schemas.QualityGridOut:
 
 def utc(t: datetime) -> datetime:
     return t.astimezone(UTC)
+
+
+# --------------------------------------------------------------------------
+# catalogue, for the sky to draw and pick from
+# --------------------------------------------------------------------------
+
+
+def catalog_out() -> schemas.CatalogOut:
+    """Every catalogue object, positioned, so anything in the sky can be picked
+    and added to a night. Not ranked and not night-specific: the sky places each
+    object with the session's own frame rotation, as it does the targets."""
+    return schemas.CatalogOut(
+        size=len(presets.CATALOG),
+        attribution=presets.CATALOG_ATTRIBUTION,
+        objects=[
+            schemas.CatalogObjectOut(
+                id=o.id,
+                name=o.target_name,
+                designation=o.designation,
+                type=o.type,
+                type_label=o.type_label,
+                constellation=o.constellation,
+                ra_deg=_f(o.ra_deg, 5),
+                dec_deg=_f(o.dec_deg, 5),
+                ra=ra_sexagesimal(o.ra_deg),
+                dec=dec_sexagesimal(o.dec_deg),
+                major_arcmin=None if o.major_arcmin is None else _f(o.major_arcmin, 2),
+                v_mag=None if o.v_mag is None else _f(o.v_mag, 2),
+                magnitude=_f(o.surface_brightness, 2),
+                plannable=o.plannable,
+                why_not=o.why_not,
+            )
+            for o in presets.CATALOG
+        ],
+    )

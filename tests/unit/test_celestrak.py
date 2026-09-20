@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from tscheduler.core.clock import AsOf, Vantage
+from tscheduler.core.clock import AsOf, LookaheadError, Vantage
 from tscheduler.providers.satellites.base import TleQuery
 from tscheduler.providers.satellites.celestrak import (
     CelesTrakProvider,
@@ -137,3 +137,43 @@ def test_fixture_provider_is_static_and_offline() -> None:
     p = FixtureTleProvider(FIXTURE)
     recs = p.fetch(TleQuery(), AsOf.at(NOW))
     assert len(recs) > 50
+
+
+def test_cached_elements_keep_their_download_time_not_their_mtime(tmp_path: Path) -> None:
+    """A cached TLE was not *published* when you re-read it off disk.
+
+    The provider used to answer a cold-memory cache hit with the file's mtime,
+    which is a ``retrieved_at`` fact standing in for a ``published_at`` one --
+    the exact conflation this system is organised to prevent. Because mtime is
+    real wall-clock time, it also drifts away from the session's clock and
+    eventually trips the publication gate on data that was perfectly legal.
+    """
+    cache = tmp_path / "cache"
+    CelesTrakProvider(cache_dir=cache, client=_mock(200, FIXTURE.read_text())).fetch(
+        TleQuery(), LIVE
+    )
+
+    cold = CelesTrakProvider(cache_dir=cache, client=_mock(403, NOT_MODIFIED_BODY))
+    recs = cold.fetch(TleQuery(), AsOf(NOW + timedelta(hours=9), Vantage.LIVE))
+    assert len(recs) > 50
+    assert all(r.published_at == NOW for r in recs.records), (
+        "cached records must carry the instant they were downloaded"
+    )
+
+
+def test_cache_with_no_stamp_is_refused_rather_than_back_dated(tmp_path: Path) -> None:
+    """A payload with no provenance is not quietly given some.
+
+    Clamping an unknown publication time to ``as_of`` would make the assertion
+    pass by manufacturing the very fact it is asserting. Refusing is correct:
+    we cannot show that these elements were knowable then.
+    """
+    cache = tmp_path / "cache"
+    CelesTrakProvider(cache_dir=cache, client=_mock(200, FIXTURE.read_text())).fetch(
+        TleQuery(), LIVE
+    )
+    next(cache.glob("*.stamp.json")).unlink()
+
+    cold = CelesTrakProvider(cache_dir=cache, client=_mock(403, NOT_MODIFIED_BODY))
+    with pytest.raises(LookaheadError):
+        cold.fetch(TleQuery(), LIVE)

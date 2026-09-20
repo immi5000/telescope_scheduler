@@ -1,0 +1,123 @@
+# Hand-maintained common names, layered over OpenNGC's "Common names" column
+# by scripts/build_catalog.py. Released with the catalogue under CC BY-SA 4.0.
+#
+# target  OpenNGC row name (NGC0224, IC0434, Mel022, HCG092) or a Sharpless
+#         region (Sh2-101).
+# action  primary  the name shown for the object, placed first
+#         alt      another name the object is searched and resolved by
+#         remove   drop a name OpenNGC gives it (compared case-insensitively)
+#         tag      a group the object belongs to: searchable, but never
+#                  resolved to one object ("Leo Triplet" is three galaxies)
+#
+# Only names in wide use among imagers belong here. When in doubt, leave it out:
+# a wrong name is worse than none.
+target,name,action
+# --- corrections to OpenNGC ------------------------------------------------
+# The Flame is NGC 2024. IC 434 is the emission behind the Horsehead.
+IC0434,Flame Nebula,remove
+IC0434,Orion B,remove
+IC0434,Horsehead Nebula,primary
+NGC2024,Flame Nebula,primary
+NGC0253,Sculptor Galaxy,primary
+NGC0253,Sculptor Filament,remove
+IC0443,Jellyfish Nebula,primary
+IC0443,Gem A,remove
+NGC2237,Rosette A,remove
+NGC6618,Checkmark Nebula,remove
+# NGC 6960 is the Western Veil, one filament of the Cygnus Loop (Sh2-103).
+# "Veil Nebula" means the whole Loop to some (Wikipedia) and NGC 6960 to others
+# (SIMBAD, OpenNGC): a tag on the Loop and each piece (below), not one row's name.
+NGC6960,Veil Nebula,remove
+# --- Messier ---------------------------------------------------------------
+NGC6205,Great Globular Cluster in Hercules,alt
+IC4715,Sagittarius Star Cloud,alt
+NGC1912,Starfish Cluster,primary
+NGC2287,Little Beehive Cluster,primary
+NGC0628,Phantom Galaxy,primary
+NGC1068,Squid Galaxy,primary
+NGC1068,Cetus A,alt
+NGC4736,Croc's Eye Galaxy,primary
+NGC4486,Virgo A,alt
+NGC5457,Pinwheel Galaxy,primary
+NGC3556,Surfboard Galaxy,primary
+NGC1976,Orion Nebula,primary
+NGC6853,Apple Core Nebula,alt
+# --- Caldwell and other favourites ----------------------------------------
+IC1805,Heart Nebula,primary
+IC1848,Soul Nebula,primary
+IC1848,Westerhout 5,alt
+IC1396,Elephant's Trunk Nebula,primary
+NGC0281,Pacman Nebula,primary
+NGC2237,Rosette Nebula,primary
+NGC6960,Western Veil,primary
+NGC6960,Witch's Broom Nebula,alt
+# OpenNGC calls both NGC 6992 and NGC 6995 the Eastern Veil; C33 keeps it.
+NGC6995,Eastern Veil (southern part),primary
+NGC6979,Pickering's Triangle,primary
+NGC6979,Fleming's Triangular Wisp,alt
+IC0410,Tadpoles Nebula,primary
+NGC2264,Cone Nebula,alt
+NGC2359,Thor's Helmet,primary
+IC2177,Seagull Nebula,primary
+NGC7380,Wizard Nebula,primary
+IC0063,Ghost of Cassiopeia,primary
+NGC3628,Hamburger Galaxy,primary
+NGC5866,Spindle Galaxy,primary
+NGC6334,Cat's Paw Nebula,primary
+IC2944,Running Chicken Nebula,primary
+NGC3576,Statue of Liberty Nebula,primary
+IC4628,Prawn Nebula,primary
+IC4592,Blue Horsehead Nebula,primary
+IC0342,Hidden Galaxy,primary
+NGC5907,Splinter Galaxy,primary
+NGC4244,Silver Needle Galaxy,primary
+NGC1514,Crystal Ball Nebula,primary
+NGC0246,Skull Nebula,primary
+NGC7008,Fetus Nebula,primary
+IC0418,Spirograph Nebula,primary
+IC1795,Fish Head Nebula,primary
+NGC7662,Blue Snowball Nebula,primary
+NGC3132,Southern Ring Nebula,alt
+IC2602,Southern Pleiades,primary
+NGC1365,Great Barred Spiral Galaxy,primary
+NGC6188,Fighting Dragons of Ara,alt
+NGC0457,E.T. Cluster,alt
+NGC7789,Caroline's Rose Cluster,primary
+NGC4656 NED01,Hockey Stick Galaxy,primary
+NGC2392,Clown Face Nebula,alt
+NGC2070,Tarantula Nebula,primary
+# --- Sharpless -------------------------------------------------------------
+Sh2-101,Tulip Nebula,primary
+Sh2-103,Cygnus Loop,primary
+Sh2-108,Sadr Region,primary
+Sh2-108,Gamma Cygni Nebula,alt
+Sh2-119,Clamshell Nebula,primary
+Sh2-129,Flying Bat Nebula,primary
+Sh2-132,Lion Nebula,primary
+Sh2-136,Ghost Nebula,primary
+Sh2-157,Lobster Claw Nebula,primary
+Sh2-240,Spaghetti Nebula,primary
+Sh2-240,Simeis 147,alt
+Sh2-261,Lower's Nebula,primary
+Sh2-274,Medusa Nebula,primary
+Sh2-276,Barnard's Loop,primary
+Sh2-308,Dolphin Head Nebula,primary
+# --- groups: found by search, never resolved to one object ----------------
+NGC3623,Leo Triplet,tag
+NGC3627,Leo Triplet,tag
+NGC3628,Leo Triplet,tag
+NGC4374,Markarian's Chain,tag
+NGC4406,Markarian's Chain,tag
+NGC4435,Markarian's Chain,tag
+NGC4438,Markarian's Chain,tag
+NGC4461,Markarian's Chain,tag
+NGC4473,Markarian's Chain,tag
+NGC4477,Markarian's Chain,tag
+NGC3031,Bode's Nebulae,tag
+NGC3034,Bode's Nebulae,tag
+NGC7331,Deer Lick Group,tag
+NGC6960,Veil Nebula,tag
+NGC6992,Veil Nebula,tag
+NGC6995,Veil Nebula,tag
+NGC6979,Veil Nebula,tag
+Sh2-103,Veil Nebula,tag

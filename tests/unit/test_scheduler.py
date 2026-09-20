@@ -159,6 +159,68 @@ def test_target_that_cannot_possibly_fit_is_dropped_not_half_observed() -> None:
     assert not observed(plan, "t0"), "must not waste time part-observing an impossible target"
 
 
+# --- why a target got no time ------------------------------------------------
+# Three different failures, three different remedies: wait six months, image it
+# on a longer night, or drop something else. They shared one message until a
+# target that never rises was told "no usable 25-minute window left tonight",
+# which reads as a near miss and sent the observer hunting for a gap that does
+# not exist at this latitude.
+def test_a_target_that_never_clears_the_floor_says_so() -> None:
+    """Never visible is not "no window" and not "outranked": there is no night
+    for it here at all, and no rearrangement of the plan would change that."""
+    vis = np.ones((2, 40), dtype=bool)
+    vis[1, :] = False
+    plan = build_and_solve(make_input(n_targets=2, visible=vis), AS_OF, FAST)
+
+    (reason,) = [d for d in plan.dropped if d.target_id == "t1"]
+    assert reason.code == "never_up"
+    assert "never" in reason.message
+    assert "altitude floor" in reason.message
+    # The near-miss wording of the other two cases must not appear.
+    assert "window" not in reason.message
+    assert "needs at least" not in reason.message
+
+
+def test_a_target_the_night_cannot_afford_quotes_the_cost() -> None:
+    """Outranked used to read "did not fit; see explain() for the
+    counterfactual" -- a note to a developer. It has to say what the target
+    costs and what the night has, because that is what the observer trims."""
+    # t0 and t1 are cheap and fit; t2 needs far more than what is left over.
+    inp = make_input(
+        n_targets=3,
+        n_slots=40,
+        eta=1.0,
+        need_ref_s=np.array([1500.0, 1500.0, 9000.0]),
+        snr_goal=np.full(3, 20.0),
+    )
+    plan = build_and_solve(inp, AS_OF, FAST)
+    assert "t2" not in plan.included
+
+    (reason,) = [d for d in plan.dropped if d.target_id == "t2"]
+    assert reason.code == "outranked"
+    assert "cannot be scheduled" in reason.message
+    # 9000 ref-seconds at eta 1.0, plus the 15% completion margin, is 172.5 min.
+    assert "needs at least 2 h 52 min of integrating" in reason.message
+    assert "to reach SNR 20" in reason.message
+    # 40 five-minute slots is the 3 h 20 min the objects in the plan are using.
+    assert "3 h 20 min left tonight" in reason.message
+    assert "explain()" not in reason.message
+
+
+def test_a_short_window_is_told_apart_from_a_full_night() -> None:
+    """A target up for 40 minutes when a block needs 25 gets neither message:
+    it can start a block, so the night really did fill up first."""
+    vis = np.ones((2, 40), dtype=bool)
+    vis[1, 8:] = False  # t1 is up for its first 8 slots only -- enough to start
+    plan = build_and_solve(
+        make_input(n_targets=2, visible=vis, need_ref_s=np.array([1500.0, 30_000.0])), AS_OF, FAST
+    )
+    (reason,) = [d for d in plan.dropped if d.target_id == "t1"]
+    # Up for 40 min, a 25-minute block fits, so this is a cost problem.
+    assert reason.code == "outranked"
+    assert "needs at least" in reason.message
+
+
 # --- C9 ----------------------------------------------------------------------
 def test_minimum_frame_count_is_enforced() -> None:
     """>= 9 frames so sigma-clipped stacking can reject satellite trails and
@@ -472,3 +534,76 @@ def test_an_abandoned_slew_is_not_reported_as_a_block() -> None:
     # The minutes are still on the record, just not as a block.
     assert plan.assignments[9].target_id == "t0"
     assert plan.assignments[9].kind is SlotKind.SWITCH
+
+
+#: A deterministic budget of zero: CP-SAT stops before its first solution, and
+#: deterministic time makes that reproducible rather than a race.
+NO_TIME = SolveOptions(deterministic=True, max_deterministic_time=0.0)
+
+
+def test_a_solve_that_finds_nothing_still_covers_the_whole_night() -> None:
+    """Regression: no solution returned ``assignments=()``.
+
+    The next re-plan locks ``prev.assignments[s]`` for every slot before its
+    boundary, so an empty tuple raised IndexError and failed the whole session
+    -- reachable from the Setup form with 2-minute slots, a dozen targets and
+    the 4 s budget. The plan must cover every slot: history replayed, idle
+    after, and still say plainly that the solver found nothing.
+    """
+    n_slots = 48
+    inp = make_input(
+        n_targets=4,
+        n_slots=n_slots,
+        locked=dict.fromkeys(range(5), "t0"),
+        locked_observing=frozenset(range(1, 5)),
+        first_free_slot=5,
+    )
+    plan = build_and_solve(inp, AS_OF, NO_TIME)
+
+    assert plan.status not in {"OPTIMAL", "FEASIBLE"}, "the budget should leave no solution"
+    assert len(plan.assignments) == n_slots
+    assert [a.slot for a in plan.assignments] == list(range(n_slots))
+    assert plan.assignments[0].kind is SlotKind.SWITCH
+    for s in range(1, 5):
+        assert plan.assignments[s].target_id == "t0"
+        assert plan.assignments[s].kind is SlotKind.OBSERVE
+        assert plan.assignments[s].locked
+    for s in range(5, n_slots):
+        assert plan.assignments[s].target_id is None
+        assert plan.assignments[s].kind is SlotKind.IDLE
+        assert not plan.assignments[s].locked
+    assert plan.included == frozenset()
+    assert {d.code for d in plan.dropped} == {"no_solution"}
+    assert len(plan.dropped) == 4
+    # The history is still a block: those frames were taken.
+    assert [(b.target_id, b.slot_start, b.slot_end) for b in plan.blocks] == [("t0", 0, 5)]
+
+
+def test_the_next_replan_can_lock_every_slot_of_a_plan_that_found_nothing() -> None:
+    """The re-plan side of the same regression, done the way solve_step does it."""
+    n_slots = 48
+    prev = build_and_solve(make_input(n_targets=3, n_slots=n_slots), AS_OF, NO_TIME)
+    assert prev.status not in {"OPTIMAL", "FEASIBLE"}
+
+    first_free = 20
+    locked = {s: prev.assignments[s].target_id for s in range(first_free)}
+    observing = frozenset(
+        s for s in range(first_free) if prev.assignments[s].kind is SlotKind.OBSERVE
+    )
+    previous = {s: prev.assignments[s].target_id for s in range(first_free, n_slots)}
+    plan = build_and_solve(
+        make_input(
+            n_targets=3,
+            n_slots=n_slots,
+            locked=locked,
+            locked_observing=observing,
+            previous_plan=previous,
+            first_free_slot=first_free,
+        ),
+        AS_OF,
+        FAST,
+    )
+    assert plan.status in {"OPTIMAL", "FEASIBLE"}
+    assert len(plan.assignments) == n_slots
+    assert plan.included, "the rest of the night is still usable"
+    assert all(s >= first_free for b in plan.blocks for s in range(b.slot_start, b.slot_end))

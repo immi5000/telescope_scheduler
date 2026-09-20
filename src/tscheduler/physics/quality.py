@@ -37,6 +37,7 @@ Why the split matters, in order of severity:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Final
 
@@ -46,6 +47,7 @@ from numpy.typing import NDArray
 from tscheduler.domain.equipment import Camera, Optics
 from tscheduler.physics.cloud import TwoStateCloud
 from tscheduler.physics.detector import (
+    Aperture,
     photometric_aperture,
     sky_e_per_s_per_px,
     snr2_rate,
@@ -73,6 +75,127 @@ class PreferenceWeights:
     satellite: float = 0.5
 
 
+@dataclass(frozen=True, slots=True)
+class ResolutionElement:
+    """The patch of sky an extended target's SNR is quoted over.
+
+    A target here is a SURFACE -- a galaxy disk, a nebula -- described by its
+    surface brightness in mag/arcsec^2, and a surface has no total signal to
+    speak of until you say over what area. The area used is the one a star
+    occupies on this rig: the SNR-optimal photometric aperture for the
+    reference star size (seeing and diffraction in quadrature). So "SNR 20"
+    means SNR 20 in each star-sized patch of the object, the scale at which an
+    image's detail is actually resolved.
+
+    The star size is the one RECORDED, ``hypot(psf, pixel)``: a pixel blurs
+    what it samples, so on an undersampled rig the patch grows smoothly with
+    the pixel instead of jumping. (Reusing the point-source aperture's
+    ``n_pix >= 4`` clamp here would be wrong twice over: that floor exists to
+    keep a star's NOISE conservative, and in a surface's SIGNAL it inflates the
+    patch -- up to ~3x the moment the pixel scale crosses the FWHM.)
+    """
+
+    n_pix: float
+    solid_angle_arcsec2: float
+
+
+def resolution_element(optics: Optics, camera: Camera) -> ResolutionElement:
+    pix = camera.pixel_scale_arcsec(optics)
+    recorded = math.hypot(optics.psf_fwhm_arcsec(REFERENCE_SEEING_ARCSEC), pix)
+    # recorded > pix always, so photometric_aperture's undersampling clamp
+    # never fires and n_pix >= pi * 0.67^2 ~ 1.4 without it.
+    ap = photometric_aperture(recorded, pix)
+    return ResolutionElement(n_pix=ap.n_pix, solid_angle_arcsec2=ap.n_pix * pix * pix)
+
+
+def extended_snr2_rate(
+    *,
+    surface_brightness: NDArray[np.float64] | float,
+    airmass: NDArray[np.float64] | float,
+    sky_mag_arcsec2: NDArray[np.float64] | float,
+    optics: Optics,
+    camera: Camera,
+    t_sub_s: float,
+    extinction_k: float = 0.20,
+    element: ResolutionElement | None = None,
+) -> NDArray[np.float64]:
+    """SNR^2 per second of open shutter, for a uniform extended source.
+
+    The source term is surface brightness TIMES the element's solid angle. The
+    earlier model passed a surface brightness to the point-source calculator
+    as though it were a star's magnitude -- counting the light of ONE square
+    arcsecond, concentrated into a star-sized aperture of ~10 -- and was only
+    ever right because the hand-entered brightnesses were 3-4 mag too bright
+    to compensate. With real catalogue values that error is a factor of ~25
+    in exposure time.
+
+    No encircled-energy factor: a uniform surface spills as much light into
+    the aperture from outside as it loses to the PSF's wings. For the same
+    reason seeing does not appear -- blurring a uniform surface leaves its
+    brightness per arcsec^2 unchanged. Seeing still matters for DETAIL, which
+    is what the preference term's seeing factor is for.
+    """
+    el = element or resolution_element(optics, camera)
+    s = source_e_per_s(surface_brightness, airmass, optics, camera, 1.0, extinction_k)
+    s = s * el.solid_angle_arcsec2
+    b = sky_e_per_s_per_px(sky_mag_arcsec2, optics, camera)
+    return snr2_rate(s, b, camera.dark_current_e_per_s, camera.read_noise_e, el.n_pix, t_sub_s)
+
+
+def point_snr2_rate(
+    *,
+    magnitude: NDArray[np.float64] | float,
+    airmass: NDArray[np.float64] | float,
+    sky_mag_arcsec2: NDArray[np.float64] | float,
+    optics: Optics,
+    camera: Camera,
+    t_sub_s: float,
+    extinction_k: float = 0.20,
+    element: ResolutionElement | None = None,
+    aperture: Aperture | None = None,
+) -> NDArray[np.float64]:
+    """SNR^2 per second of open shutter, for a POINT source: a star.
+
+    The counterpart of :func:`extended_snr2_rate`, and the difference between
+    them is the whole reason ``Target`` has to say which kind of source it is.
+    A star's V magnitude is its TOTAL light, so:
+
+    * the encircled-energy fraction applies -- the aperture catches most of the
+      PSF but not all of it, where a uniform surface loses nothing because it
+      gains as much from outside the aperture as it spills out;
+    * there is NO multiplication by the element's solid angle. That factor is
+      what turns "light from one square arcsecond" into "light from the whole
+      aperture", and a star's magnitude already counts all of it.
+
+    Getting this backwards is the error ``extended_snr2_rate`` documents: a
+    factor of about 25 in exposure time, in the direction of finishing early.
+    Hence the two functions rather than one with a flag buried in it.
+
+    Seeing DOES matter here, unlike the extended case: it sets the recorded
+    PSF, which sets both the encircled energy and the pixel count the noise is
+    summed over. It is taken at the reference value through
+    :func:`resolution_element`, the same place the extended path takes it, so
+    the two stay comparable.
+    """
+    el = element or resolution_element(optics, camera)
+    ap = aperture or _reference_aperture(optics, camera)
+    s = source_e_per_s(magnitude, airmass, optics, camera, ap.encircled_energy, extinction_k)
+    b = sky_e_per_s_per_px(sky_mag_arcsec2, optics, camera)
+    return snr2_rate(s, b, camera.dark_current_e_per_s, camera.read_noise_e, el.n_pix, t_sub_s)
+
+
+def _reference_aperture(optics: Optics, camera: Camera) -> Aperture:
+    """The photometric aperture :func:`resolution_element` is measured on.
+
+    Factored out so the point-source path takes its encircled energy from the
+    SAME aperture whose ``n_pix`` it uses for the noise. Reading the two from
+    different apertures is silently wrong and impossible to see in the output.
+    """
+    pix = camera.pixel_scale_arcsec(optics)
+    recorded = math.hypot(optics.psf_fwhm_arcsec(REFERENCE_SEEING_ARCSEC), pix)
+    return photometric_aperture(recorded, pix)
+
+
 def efficiency(
     *,
     target_magnitude: float,
@@ -87,8 +210,20 @@ def efficiency(
     reference_sky_mag_arcsec2: float = 21.5,
     cloud_model: TwoStateCloud | None = None,
     eta_max: float = 3.0,
+    point_source: bool = False,
 ) -> tuple[NDArray[np.float64], float]:
     """Return ``(eta[S], rho_reference)``.
+
+    ``target_magnitude`` is a V SURFACE brightness in mag/arcsec^2 for an
+    extended object; see :func:`extended_snr2_rate` for how it becomes signal.
+    ``seeing_fwhm_arcsec`` is accepted for the callers' sake and deliberately
+    unused: it cannot change the signal per arcsec^2 of a uniform surface.
+
+    WITH ``point_source=True`` it is instead a TOTAL V magnitude -- a star --
+    and :func:`point_snr2_rate` prices it. The two readings of the same number
+    differ by the element's solid angle, so the flag is not a refinement: get
+    it wrong and the answer is off by a factor of ~25. It defaults to False so
+    every catalogue object keeps the meaning it already had.
 
     ``rho_reference`` is the SNR^2 accumulation rate this target would enjoy at
     the named reference condition, so ``E_t = snr_goal^2 / rho_ref`` comes out in
@@ -99,47 +234,40 @@ def efficiency(
     ratio, not a probability, and clamping it at 1 would quietly discard the
     advantage of a superb slot.
     """
+    del seeing_fwhm_arcsec  # see the docstring: not an input to a surface's signal
     cloud = cloud_model or TwoStateCloud()
-    pix = camera.pixel_scale_arcsec(optics)
+    element = resolution_element(optics, camera)
 
-    ap_ref = photometric_aperture(REFERENCE_SEEING_ARCSEC, pix)
-    s_ref = source_e_per_s(
-        target_magnitude, REFERENCE_AIRMASS, optics, camera, ap_ref.encircled_energy, extinction_k
-    )
-    b_ref = sky_e_per_s_per_px(reference_sky_mag_arcsec2, optics, camera)
-    rho_ref = float(
-        snr2_rate(
-            s_ref, b_ref, camera.dark_current_e_per_s, camera.read_noise_e, ap_ref.n_pix, t_sub_s
+    def rate(
+        airmass_: NDArray[np.float64] | float, sky_: NDArray[np.float64] | float
+    ) -> NDArray[np.float64]:
+        if point_source:
+            return point_snr2_rate(
+                magnitude=target_magnitude,
+                airmass=airmass_,
+                sky_mag_arcsec2=sky_,
+                optics=optics,
+                camera=camera,
+                t_sub_s=t_sub_s,
+                extinction_k=extinction_k,
+                element=element,
+            )
+        return extended_snr2_rate(
+            surface_brightness=target_magnitude,
+            airmass=airmass_,
+            sky_mag_arcsec2=sky_,
+            optics=optics,
+            camera=camera,
+            t_sub_s=t_sub_s,
+            extinction_k=extinction_k,
+            element=element,
         )
-    )
+
+    rho_ref = float(rate(REFERENCE_AIRMASS, reference_sky_mag_arcsec2))
     if rho_ref <= 0.0:
         return np.zeros_like(airmass), 0.0
 
-    # Per-slot. n_pix varies with seeing, so it is computed per slot too.
-    fwhm = np.asarray(seeing_fwhm_arcsec, dtype=np.float64)
-    n_pix = np.maximum(np.pi * (0.67 * fwhm / pix) ** 2, 1.0)
-    sigma = fwhm / 2.3548200450309493
-    ee = 1.0 - np.exp(-((0.67 * fwhm) ** 2) / (2.0 * sigma**2))
-
-    s = source_e_per_s(target_magnitude, airmass, optics, camera, 1.0, extinction_k) * ee
-    b = sky_e_per_s_per_px(sky_mag_arcsec2, optics, camera)
-
-    rho = np.asarray(
-        [
-            float(
-                snr2_rate(
-                    s[i],
-                    b[i],
-                    camera.dark_current_e_per_s,
-                    camera.read_noise_e,
-                    float(n_pix[i]),
-                    t_sub_s,
-                )
-            )
-            for i in range(len(s))
-        ],
-        dtype=np.float64,
-    )
+    rho = rate(np.asarray(airmass, dtype=np.float64), np.asarray(sky_mag_arcsec2, dtype=np.float64))
 
     # Cloud enters as an unbiased DUTY CYCLE, not as grey extinction.
     rho = rho * cloud.duty_cycle(cloud_fraction)

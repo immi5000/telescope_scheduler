@@ -1,0 +1,225 @@
+/**
+ * Ground rules. No colour literals anywhere in this file or in
+ * components.css -- every colour is a `var()` published by theme/tokens.ts at
+ * boot, which is what makes that module the single source of truth rather than
+ * merely the largest copy of it.
+ *
+ * The shape and type system lives here, in the same spirit: one scale, named
+ * once, so a panel and a toast and a form field cannot quietly disagree about
+ * what a card corner or a label looks like.
+ *
+ * ONE VOICE. Everything is Inter, sentence case, weight 400. There are no
+ * uppercase monospace labels: the earlier build set every heading, column head
+ * and field label in tracked mono caps, and the result read as a telemetry
+ * readout rather than as something a person uses at two in the morning. Size,
+ * colour and space carry the hierarchy instead. Mono survives in exactly one
+ * role -- a run of digits that must not shuffle sideways as it ticks, which is
+ * the clock and a coordinate, and nothing else.
+ *
+ * CONTROLS ARE SURFACES. A control has a fill, not just a hairline. A row of
+ * hairline outlines on near-black is elegant and unusable: nothing looks
+ * pressable, and hover is the only thing that tells you it was. Each control
+ * therefore sits a step above the card it is on, lifts on hover, and settles
+ * on press.
+ *
+ * Two prohibitions worth stating out loud, both learned the hard way:
+ *
+ *   1. NEVER put a `filter`, `transform`, `backdrop-filter` or `perspective`
+ *      on `html` or `body`. Any of them creates a containing block, which
+ *      silently re-anchors every `position: fixed` descendant to that element
+ *      instead of the viewport. The removed brightness slider did exactly this
+ *      and the toasts drifted for it.
+ *   2. No global `svg text { fill: ... }`. The previous build relied on one,
+ *      and it was load-bearing in a way nobody could see: removing it blanked
+ *      labels in four components at once. Set `fill` per element.
+ */
+
+:root {
+  /* 4px base. Nothing is spaced off-scale. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* Two corners, and no third. 8px for anything that holds content, 6px for
+     anything you click. Nothing here is a pill: a pill reads as a marketing
+     CTA, and every control on this page is an instrument. */
+  --r-card: 8px;
+  --r-field: 8px;
+  --r-control: 6px;
+
+  --font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Digits only -- see the note above. Never a label. */
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--void-deep);
+  color: var(--ink);
+  font: 400 13px/1.5 var(--font-sans);
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/**
+ * Tabular figures for anything that updates in place. Without this, a
+ * coordinate ticking from 64.1 to 64.9 makes the whole line shuffle sideways,
+ * which is precisely the kind of motion the eye tracks and the mind resents.
+ */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/**
+ * A panel or section head. Sentence case, in the same face as everything
+ * else -- it is quieter than the content below it because it is dimmer and
+ * smaller, not because it has been set in a different typeface and shouted.
+ */
+.eyebrow,
+h2 {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: -0.005em;
+  color: var(--ink-dim);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+}
+
+/* Weight 400 throughout; size and negative tracking do the emphasis work. */
+h1 {
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+}
+
+h3 {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--ink-dim);
+}
+
+button {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/**
+ * Fields read as wells: a step DARKER than the card, with a light top edge,
+ * so the eye sees somewhere to put something rather than an outlined
+ * rectangle. On focus the whole well warms to the accent rather than growing
+ * a ring beside it.
+ */
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: inherit;
+  color: var(--ink);
+  background: var(--well);
+  border: 1px solid var(--edge-soft);
+  border-top-color: var(--edge);
+  border-radius: var(--r-field);
+  padding: 9px 11px;
+  width: 100%;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  background: var(--well-hover);
+  border-color: var(--edge);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  background: var(--well-hover);
+  border-color: var(--accent-deep);
+}
+
+select {
+  cursor: pointer;
+}
+
+/* Accessible focus, and only where the pointer did not already say so. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[role="slider"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--edge-soft);
+  border-radius: var(--r-control);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--edge);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dim {
+  color: var(--ink-dim);
+}
+.faint {
+  color: var(--ink-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

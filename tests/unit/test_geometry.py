@@ -177,3 +177,112 @@ def test_southern_hemisphere_site_works() -> None:
     smc = Target("smc", "SMC", 13.1583, -72.8003, 2.7)
     g = build_night_geometry(chile, grid, (smc,))
     assert g.altitude_deg[0].max() > 40.0
+
+
+# --------------------------------------------------------------------------
+# The frame the browser draws with
+# --------------------------------------------------------------------------
+
+
+def _quat_to_matrix(q: np.ndarray) -> np.ndarray:
+    """(S,4) -> (S,3,3), written the way three.js writes it.
+
+    Deliberately NOT a call back into the code under test: the point is to
+    reproduce the arithmetic the renderer will actually perform, so an error in
+    our quaternion convention shows up here rather than as a beautifully
+    rendered, silently rotated sky.
+    """
+    x, y, z, w = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
+    return np.stack(
+        [
+            np.stack([1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)], -1),
+            np.stack([2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)], -1),
+            np.stack([2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)], -1),
+        ],
+        -2,
+    )
+
+
+def _icrs_unit(ra_deg: float, dec_deg: float) -> np.ndarray:
+    ra, dec = np.radians(ra_deg), np.radians(dec_deg)
+    return np.array([np.cos(dec) * np.cos(ra), np.cos(dec) * np.sin(ra), np.sin(dec)])
+
+
+def test_frame_quaternion_is_a_unit_rotation(geo) -> None:
+    n = np.linalg.norm(geo.frame_quat, axis=1)
+    assert np.allclose(n, 1.0, atol=1e-12), "a non-unit quaternion scales the whole sky"
+    r = _quat_to_matrix(geo.frame_quat)
+    assert np.allclose(np.einsum("sij,sik->sjk", r, r), np.eye(3), atol=1e-9)
+    assert np.all(np.linalg.det(r) > 0.99), "a reflection would mirror the sky, not rotate it"
+
+
+def test_frame_quaternion_reproduces_altaz(geo) -> None:
+    """The one check that catches every handedness, sign and axis error at once.
+
+    Rotating a target's ICRS unit vector by the published quaternion must
+    reproduce the published altitude AND azimuth. Both, because altitude alone
+    is invariant under a spurious rotation about the zenith -- the sky would
+    spin and every altitude would still agree.
+
+    The tolerance is 0.02 deg rather than zero because ICRS to horizontal is
+    not exactly a rigid rotation: annual aberration is direction-dependent and
+    up to ~20 arcsec. Approximating it by the nearest true rotation is what
+    lets the client hold ONE orientation per slot instead of transforming every
+    object individually, and ~30 arcsec on a sphere a thousand pixels across is
+    a twentieth of a pixel.
+    """
+    r = _quat_to_matrix(geo.frame_quat)
+    for i, tid in enumerate(geo.target_ids):
+        local = np.einsum("sji,j->si", r, _icrs_unit(*_radec(tid)))  # R^T v -> (E, N, U)
+        alt = np.degrees(np.arcsin(np.clip(local[:, 2], -1.0, 1.0)))
+        az = np.degrees(np.arctan2(local[:, 0], local[:, 1])) % 360.0
+        assert np.max(np.abs(alt - geo.altitude_deg[i])) < 0.02, f"{tid} altitude"
+        # Azimuth is ill-conditioned near the zenith, where a tiny positional
+        # error swings it by degrees; compare only where it is meaningful.
+        usable = geo.altitude_deg[i] < 85.0
+        d = np.abs((az - geo.azimuth_deg[i] + 180.0) % 360.0 - 180.0)
+        assert np.max(d[usable] * np.cos(np.radians(geo.altitude_deg[i][usable]))) < 0.02, (
+            f"{tid} azimuth"
+        )
+
+
+def _radec(target_id: str) -> tuple[float, float]:
+    t = {t.id: t for t in (POLARIS, M51, M31, NGC7331)}[target_id]
+    return t.ra_deg, t.dec_deg
+
+
+def test_sidereal_time_alone_would_not_have_worked(geo) -> None:
+    """Why ``frame_quat`` exists rather than ``lst_hours`` plus latitude.
+
+    ``RA = LST, Dec = latitude`` is the zenith only in APPARENT coordinates of
+    date. Our targets and every star catalogue are ICRS/J2000, and in 2026 the
+    difference is a third of a degree of precession. This test asserts the
+    error is real and large, so that nobody "simplifies" the payload by
+    dropping the quaternion and rebuilding the frame from sidereal time.
+    """
+    lat = np.radians(LAT)
+    worst = 0.0
+    for i, tid in enumerate(geo.target_ids):
+        ra, dec = _radec(tid)
+        h = np.radians(geo.lst_hours * 15.0 - ra)
+        sin_alt = np.sin(np.radians(dec)) * np.sin(lat) + np.cos(np.radians(dec)) * np.cos(
+            lat
+        ) * np.cos(h)
+        alt = np.degrees(np.arcsin(np.clip(sin_alt, -1.0, 1.0)))
+        worst = max(worst, float(np.max(np.abs(alt - geo.altitude_deg[i]))))
+    assert worst > 0.1, (
+        "the naive sidereal-time construction now agrees with the real frame; "
+        "if that is genuinely true the quaternion could be dropped, but check "
+        "first that this test is still comparing ICRS against apparent"
+    )
+
+
+def test_lst_advances_by_a_sidereal_day(geo) -> None:
+    """A solar day is 3m56s of sidereal time longer than 24h, so LST gains
+    ~1.0027 h per hour. Catches a mean/apparent mix-up only by magnitude, but
+    catches a units error (degrees for hours) instantly."""
+    lst = np.unwrap(geo.lst_hours, period=24.0)
+    grid = geo.grid
+    hours = np.arange(grid.n_slots) * grid.slot_minutes / 60.0
+    rate = np.polyfit(hours, lst, 1)[0]
+    assert 1.0025 < rate < 1.0030, f"sidereal rate is {rate}, expected ~1.00274"

@@ -1,0 +1,108 @@
+/* The live edge: tonight's "not yet", and the controls that return to now. */
+
+/* Everything right of the wall clock. The plan shows through, dimmed and
+   hatched, because it is a forecast; the cursor cannot enter it. */
+.nightbar__veil {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  left: 100%;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--ink) 6%, transparent) 0 2px,
+      transparent 2px 7px
+    ),
+    color-mix(in srgb, var(--void-deep) 58%, transparent);
+  border-left: 1px dashed color-mix(in srgb, var(--crit) 70%, transparent);
+}
+
+.live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--crit);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--crit) 60%, transparent);
+  animation: live-pulse 2s ease-out infinite;
+}
+
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--crit) 60%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none;
+  }
+}
+
+.timebox__live {
+  height: 26px;
+  padding: 0 14px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.timebox__live:hover {
+  color: var(--ink);
+  border-color: var(--edge);
+}
+.timebox__live[aria-pressed='true'] {
+  color: var(--crit);
+  border-color: color-mix(in srgb, var(--crit) 55%, transparent);
+  cursor: default;
+}
+/* Reviewing earlier tonight: the dot goes still, so "not live" reads at a glance. */
+.timebox__live[aria-pressed='false'] .live-dot {
+  animation: none;
+  background: var(--ink-faint);
+}
+
+.transport .transport__live[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--crit) 55%, transparent);
+}
+
+/* The server's watch for new data, in the Activity panel. */
+.livewatch {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  margin-bottom: 6px;
+}
+.livewatch--error {
+  color: var(--warn);
+}
+.livewatch__check {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-soft);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+.livewatch__check:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--edge);
+}
+.livewatch__check:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

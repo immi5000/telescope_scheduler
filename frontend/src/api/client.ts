@@ -12,8 +12,18 @@ type Schemas = components["schemas"];
 
 export type Presets = Schemas["PresetsOut"];
 export type SitePreset = Schemas["SitePresetOut"];
-export type EquipmentPreset = Schemas["EquipmentPresetOut"];
-export type CatalogEntry = Schemas["CatalogEntryOut"];
+export type Equipment = Schemas["EquipmentOut"];
+/** @deprecated the same shape now describes custom rigs too; use `Equipment`. */
+export type EquipmentPreset = Equipment;
+export type EquipmentRequest = Schemas["EquipmentRequest"];
+export type TelescopePreset = Schemas["TelescopePresetOut"];
+export type CameraPreset = Schemas["CameraPresetOut"];
+export type SiteRequest = Schemas["SiteRequest"];
+export type TonightRequest = Schemas["TonightRequest"];
+export type Tonight = Schemas["TonightOut"];
+export type TargetSuggestion = Schemas["TargetSuggestionOut"];
+export type WeatherSource = Schemas["WeatherSourceOut"];
+export type WeatherOutlook = Schemas["WeatherOutlookOut"];
 export type Session = Schemas["SessionOut"];
 export type SessionListItem = Schemas["SessionListItemOut"];
 export type SessionRequest = Schemas["SessionRequest"];
@@ -25,8 +35,20 @@ export type DecisionPoint = Schemas["DecisionPointOut"];
 export type TwilightBand = Schemas["TwilightBandOut"];
 export type QualityGrid = Schemas["QualityGridOut"];
 export type GridRow = Schemas["GridRowOut"];
+export type Geometry = Schemas["GeometryOut"];
+export type GeometryRow = Schemas["GeometryRowOut"];
+export type Moon = Schemas["MoonOut"];
+export type Target = Schemas["TargetOut"];
+export type Grid = Schemas["GridOut"];
 export type Warning = Schemas["WarningOut"];
 export type Health = Schemas["HealthOut"];
+export type NightWindow = Schemas["NightWindowOut"];
+export type Location = Schemas["LocationOut"];
+export type Sky = Schemas["SkyOut"];
+export type Planet = Schemas["PlanetOut"];
+export type Satellites = Schemas["SatellitesOut"];
+export type SatellitePass = Schemas["SatellitePassOut"];
+export type Live = Schemas["LiveOut"];
 
 export class ApiError extends Error {
   constructor(
@@ -37,8 +59,19 @@ export class ApiError extends Error {
   }
 }
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: { accept: "application/json" } });
+async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(path, { headers: { accept: "application/json" }, signal });
+  if (!res.ok) throw new ApiError(res.status, await detail(res));
+  return (await res.json()) as T;
+}
+
+async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
   if (!res.ok) throw new ApiError(res.status, await detail(res));
   return (await res.json()) as T;
 }
@@ -66,15 +99,63 @@ export const api = {
   grid: (id: string, asOf: string) =>
     get<QualityGrid>(`/api/sessions/${id}/grid?as_of=${encodeURIComponent(asOf)}`),
 
-  async create(body: SessionRequest): Promise<Session> {
-    const res = await fetch("/api/sessions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new ApiError(res.status, await detail(res));
-    return (await res.json()) as Session;
-  },
+  /**
+   * Where everything is, all night. Takes no instant, by construction.
+   *
+   * Nothing in this payload depends on published data, so there is no clock in
+   * the question and therefore nothing that could leak. It is also immutable
+   * for the life of the session, so the browser cache serves it from then on
+   * and a scrub across the whole night costs one request, once.
+   */
+  geometry: (id: string) => get<Geometry>(`/api/sessions/${id}/geometry`),
+
+  /** Planets and how dark the sky is, per slot. Display only; no instant. */
+  sky: (id: string) => get<Sky>(`/api/sessions/${id}/sky`),
+
+  /**
+   * Satellite passes across the night, every ten seconds. Answers
+   * `available: false` with a reason, never an error, when offline.
+   */
+  satellites: (id: string) => get<Satellites>(`/api/sessions/${id}/satellites`),
+
+  /** Astronomical dusk and dawn for a site. The client never derives these. */
+  nightWindow: (date: string, lat: number, lon: number, elevationM: number) =>
+    get<NightWindow>(
+      `/api/night-window?date=${encodeURIComponent(date)}&lat=${lat}&lon=${lon}` +
+        `&elevation_m=${elevationM}`,
+    ),
+
+  /**
+   * What the browser's coordinates are called, and how high they are.
+   *
+   * Decoration only: the coordinates came from the device and are the site
+   * whatever this answers. Both fields are nullable and a lookup that could
+   * not be made answers 200 with nulls, so a caller shows the coordinates
+   * either way rather than treating this as a failure.
+   */
+  locate: (lat: number, lon: number, signal?: AbortSignal) =>
+    get<Location>(`/api/site/locate?lat=${lat}&lon=${lon}`, signal),
+
+  /**
+   * Focal ratio, resolving power, star size, sampling and field for whatever
+   * rig the form currently holds. The form shows these beside its inputs, and
+   * they are the server's arithmetic -- the same the scheduler will use.
+   */
+  deriveEquipment: (body: EquipmentRequest, signal?: AbortSignal) =>
+    post<Equipment>("/api/equipment/derive", body, signal),
+
+  /** The whole catalogue, ranked for one site, night and rig. No weather. */
+  tonight: (body: TonightRequest, signal?: AbortSignal) =>
+    post<Tonight>("/api/targets/tonight", body, signal),
+
+  create: (body: SessionRequest) => post<Session>("/api/sessions", body),
+
+  /**
+   * Ask the server to check a live night for new data now rather than at its
+   * next scheduled check. 409 for a replay night, 429 within a minute of the
+   * last check.
+   */
+  refresh: (id: string) => post<Session>(`/api/sessions/${id}/refresh`, {}),
 };
 
 /**

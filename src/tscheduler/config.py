@@ -43,6 +43,11 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 8000
     solve_seconds: float = 4.0
+    live_refresh_minutes: float = 15.0
+    """How often a night that is still happening asks its weather source for
+    anything new. Zero turns the watch off (a manual refresh still works).
+    Not lower than ~15: Open-Meteo is free, rate-limited, and publishes a new
+    model run a few times a day, so a faster poll finds nothing and risks 429s."""
 
     #: Credentials. Masked in every representation; see ``describe()``.
     spacetrack_user: str = field(default="", repr=False)
@@ -59,6 +64,7 @@ class Settings:
             "host": self.host,
             "port": self.port,
             "solve_seconds": self.solve_seconds,
+            "live_refresh_minutes": self.live_refresh_minutes,
             "spacetrack_configured": self.has_spacetrack,
         }
 
@@ -78,6 +84,7 @@ def load_settings(root: Path | None = None) -> Settings:
         host=get("HOST", "127.0.0.1"),
         port=int(get("PORT", "8000")),
         solve_seconds=float(get("SOLVE_SECONDS", "4.0")),
+        live_refresh_minutes=float(get("LIVE_REFRESH_MINUTES", "15")),
         spacetrack_user=get("SPACETRACK_USER"),
         spacetrack_pass=get("SPACETRACK_PASS"),
     )

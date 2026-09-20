@@ -16,7 +16,7 @@ import numpy as np
 from tscheduler.core.clock import AsOf
 from tscheduler.domain.plan import Assignment, Block, DropReason, Plan, SlotKind
 from tscheduler.providers.base import EvidenceLedger
-from tscheduler.scheduling.cpsat import SchedulerInput, block_expected_snr
+from tscheduler.scheduling.cpsat import SchedulerInput, block_expected_snr, block_frames
 
 
 def solve_naive(
@@ -107,7 +107,8 @@ def solve_naive(
                 slot_start=i,
                 slot_end=end,
                 switch_slots=end - i - len(data),
-                n_subs=int(sum(int(inp.subs_per_slot[t, k]) for k in data)),
+                # Per block, as the optimizer's blocks count them.
+                n_subs=block_frames(inp, t, len(data)),
                 t_sub_s=float(inp.t_sub_s[t]),
                 expected_snr=block_expected_snr(inp, t, data),
             )

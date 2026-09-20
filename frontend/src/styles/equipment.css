@@ -1,0 +1,243 @@
+/*
+ * The rig editor on the setup sheet. No colour literals -- see base.css.
+ *
+ * Every selector starts at `.eq`. This file is imported by a component, so it
+ * lands in the bundle BEFORE base.css and components.css (main.tsx imports
+ * App first); an unqualified rule here would lose every tie to them.
+ */
+
+.eq {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+/* Telescope | Camera, with the mount tucked under the (shorter) telescope. */
+.eq .eq__pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    "tel cam"
+    "mount cam";
+  grid-template-rows: auto 1fr;
+  gap: 14px 26px;
+}
+
+.eq .eq__group {
+  display: grid;
+  /* Not the implicit `auto` track: that one grows to the max-content of the
+     fields grid inside it and pushes the column into its neighbour. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+}
+.eq .eq__group--tel {
+  grid-area: tel;
+}
+.eq .eq__group--cam {
+  grid-area: cam;
+}
+.eq .eq__group--mount {
+  grid-area: mount;
+  gap: 8px;
+}
+
+.eq .eq__fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.eq .eq-field {
+  min-width: 0;
+}
+/* One line, always: a wrapped label knocks its row's inputs out of line. */
+.eq .eq-field > label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.eq .eq-field--wide {
+  grid-column: span 2;
+}
+
+.eq .eq__sub {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+
+/* -- picker head: label, edited marker, reset ---------------------------- */
+
+.eq .eq__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 19px;
+  margin-bottom: 4px;
+}
+.eq .eq__head label {
+  margin-bottom: 0;
+  color: var(--ink-faint);
+}
+
+.eq .eq__edited {
+  padding: 1px 8px;
+  color: var(--accent);
+  border-color: var(--accent-deep);
+}
+
+.eq .eq__reset {
+  margin-left: auto;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+.eq .eq__reset:hover {
+  color: var(--ink);
+}
+
+/* -- where a preset's figures came from ---------------------------------- */
+
+.eq .eq-note {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--ink-faint);
+}
+.eq .eq-note:hover {
+  color: var(--ink-dim);
+}
+.eq .eq-dot {
+  background: var(--accent);
+}
+.eq .eq-note__i {
+  flex: none;
+}
+.eq .eq-note__text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.eq .eq-note[aria-expanded="true"] .eq-note__text {
+  white-space: normal;
+}
+
+/* -- a label's "differs from the preset" dot ------------------------------ */
+
+.eq .eq-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 0 1px 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--accent);
+}
+
+/* -- number boxes with their unit inside ---------------------------------- */
+
+.eq .eq-num {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--edge-soft);
+  border-radius: var(--r-field);
+  transition: border-color 120ms ease;
+}
+.eq .eq-num:hover {
+  border-color: var(--edge);
+}
+.eq .eq-num:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.eq .eq-num input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: 7px 2px 7px 9px;
+  border: none;
+  border-radius: var(--r-field);
+  background: none;
+}
+.eq .eq-num input:hover {
+  border-color: transparent;
+}
+.eq .eq-num input:focus-visible {
+  outline: none;
+}
+.eq .eq-num__affix {
+  flex: none;
+  padding: 0 9px 0 3px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  user-select: none;
+}
+.eq .eq-num__affix--pre {
+  padding: 0 0 0 8px;
+}
+.eq .eq-num__affix--pre + input {
+  padding-left: 2px;
+}
+.eq .eq-num--invalid {
+  border-color: var(--crit);
+}
+.eq .eq-err {
+  color: var(--crit);
+}
+
+/* Sensor width x height. */
+.eq .eq-by {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.eq .eq-by .eq-num {
+  flex: 1 1 0;
+}
+.eq .eq-by__x {
+  flex: none;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+/* Reducer select; a custom factor gets its own box underneath rather than
+   squeezing the select down to "Cus". */
+.eq .eq-reducer {
+  display: grid;
+  gap: 6px;
+}
+
+/* -- narrow sheets ------------------------------------------------------- */
+
+@container (max-width: 780px) {
+  .eq .eq__pair {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "tel"
+      "cam"
+      "mount";
+    grid-template-rows: none;
+  }
+}
+
+@container (max-width: 420px) {
+  .eq .eq__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

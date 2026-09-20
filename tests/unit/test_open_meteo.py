@@ -9,16 +9,20 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 from tscheduler.core.clock import AsOf, Vantage
 from tscheduler.core.timegrid import TimeGrid
 from tscheduler.providers.weather.model import WeatherQuery
 from tscheduler.providers.weather.open_meteo import (
-    FALLBACK_LAG_H,
-    LAG_SAFETY_MARGIN_H,
     OpenMeteoLiveForecast,
     OpenMeteoReplayForecast,
+    conservative_lag,
+    default_client,
+    fallback_lag,
+    fetch_meta,
+    lag_floor,
     measure_dissemination_lag,
 )
 
@@ -39,11 +43,50 @@ def test_live_provider_refuses_a_replay_as_of() -> None:
         OpenMeteoLiveForecast()._fetch(_query(), AsOf.at(NIGHT))
 
 
+def _offline() -> httpx.Client:
+    def refuse(r: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("offline", request=r)
+
+    return httpx.Client(transport=httpx.MockTransport(refuse))
+
+
+def _meta(init: datetime, avail: datetime) -> httpx.Client:
+    def serve(r: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "last_run_initialisation_time": init.timestamp(),
+                "last_run_availability_time": avail.timestamp(),
+            },
+        )
+
+    return httpx.Client(transport=httpx.MockTransport(serve))
+
+
 def test_lag_falls_back_generously_when_metadata_is_unreachable() -> None:
     """A scheduler that refuses to run without a metadata endpoint is worse than
     one that is slightly pessimistic about publication times."""
-    lag = measure_dissemination_lag("definitely_not_a_model")
-    assert lag == timedelta(hours=8.0)
+    assert measure_dissemination_lag("ecmwf_ifs025", _offline()) == timedelta(hours=9.0)
+    assert measure_dissemination_lag("definitely_not_a_model", _offline()) == timedelta(hours=8.0)
+
+
+def test_a_fast_measurement_is_floored_and_a_slow_one_kept() -> None:
+    """meta.json times only the newest run. A 06z run out after 7.16 h would
+    give 7.75 h; ECMWF's 00z/12z runs take ~8.4 h, so the floor is 9.0 h."""
+    init = datetime(2026, 9, 18, 6, tzinfo=UTC)
+    fast = measure_dissemination_lag("ecmwf_ifs025", _meta(init, init + timedelta(hours=7.16)))
+    slow = measure_dissemination_lag("ecmwf_ifs025", _meta(init, init + timedelta(hours=9.2)))
+    assert fast == timedelta(hours=9.0) == lag_floor("ecmwf_ifs025")
+    assert slow == timedelta(hours=9.75)
+    assert fallback_lag("ecmwf_ifs025") >= lag_floor("ecmwf_ifs025")
+    # A model with no recorded floor keeps its measurement.
+    assert conservative_lag("gfs_seamless", timedelta(hours=3.5)) == timedelta(hours=3.5)
+
+
+def test_the_replay_provider_floors_its_measured_lag() -> None:
+    init = datetime(2026, 9, 18, 6, tzinfo=UTC)
+    p = OpenMeteoReplayForecast(client=_meta(init, init + timedelta(hours=7.16)))
+    assert p._lag_for("ecmwf_ifs025") == timedelta(hours=9.0)
 
 
 def test_run_enumeration_covers_the_night_at_the_model_cadence() -> None:
@@ -67,10 +110,11 @@ def test_coverage_key_excludes_as_of() -> None:
 
 @pytest.mark.network
 def test_measured_lag_is_plausible_for_ecmwf() -> None:
-    lag = measure_dissemination_lag("ecmwf_ifs025")
+    # fetch_meta raises rather than falling back, so a pass is a real reading.
+    with default_client() as c:
+        lag = fetch_meta("ecmwf_ifs025", c).lag
     hours = lag.total_seconds() / 3600.0
     assert 4.0 < hours < 12.0, f"implausible measured lag {hours:.2f} h"
-    assert hours != FALLBACK_LAG_H["ecmwf_ifs025"] + LAG_SAFETY_MARGIN_H, "fell back silently"
 
 
 @pytest.mark.network

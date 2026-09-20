@@ -1,6 +1,130 @@
 {
   "components": {
     "schemas": {
+      "AddTargetRequest": {
+        "description": "Add one object to a night that is already planned.\n\nUsually a name the server can resolve. It may instead carry its OWN\ncoordinates, which is the only way to add something the server has never\nheard of -- a star. All 41,411 of them live in the browser, in\n``public/sky/stars.bin``, keyed by position in that file, and some 36,000\nhave no name at all; there is nothing for the server to look up. So the\nclient sends what it knows, exactly as ``SessionRequest.targets`` already\nallows for a custom object.",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "a replay re-plans from this instant (the cursor); omitted means dusk. Ignored for a night still happening, which is always amended from now",
+            "title": "At"
+          },
+          "decDeg": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decdeg"
+          },
+          "isPointSource": {
+            "default": false,
+            "description": "true for a star: magnitude is then its total light, and the exposure model prices it as a point source instead of a surface. Getting this wrong is a factor of ~25 in exposure time",
+            "title": "Ispointsource",
+            "type": "boolean"
+          },
+          "magnitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "V surface brightness in mag/arcsec^2, or a TOTAL V magnitude when isPointSource is true. All three of raDeg, decDeg and magnitude are needed together",
+            "title": "Magnitude"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "display label; defaults to the id",
+            "title": "Name"
+          },
+          "raDeg": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 360.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Radeg"
+          },
+          "target": {
+            "description": "anything that names a catalogue object or a planet: m31, 'NGC 7000', 'Horsehead', 'jupiter'. With raDeg, decDeg and magnitude it is instead this object's id, and nothing is looked up",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "title": "AddTargetRequest",
+        "type": "object"
+      },
+      "AmendOut": {
+        "description": "What adding the object did.\n\nOnly ever returned for an object that IS scheduled: adding a target is a\nrequest, not an order, and one the optimiser cannot place is refused with\n409 and the reason rather than joining the night unscheduled.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "decisionIndex": {
+            "title": "Decisionindex",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "sessionId": {
+            "title": "Sessionid",
+            "type": "string"
+          },
+          "targetId": {
+            "title": "Targetid",
+            "type": "string"
+          },
+          "targetName": {
+            "title": "Targetname",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "targetId",
+          "targetName",
+          "at",
+          "decisionIndex",
+          "message"
+        ],
+        "title": "AmendOut",
+        "type": "object"
+      },
       "BlockOut": {
         "properties": {
           "airmassMax": {
@@ -170,8 +294,148 @@
         "title": "BlockOut",
         "type": "object"
       },
-      "CatalogEntryOut": {
+      "CameraPresetOut": {
         "properties": {
+          "color": {
+            "title": "Color",
+            "type": "boolean"
+          },
+          "darkCurrentEPerS": {
+            "title": "Darkcurrentepers",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Notes",
+            "type": "string"
+          },
+          "peakQe": {
+            "title": "Peakqe",
+            "type": "number"
+          },
+          "pixelSizeUm": {
+            "title": "Pixelsizeum",
+            "type": "number"
+          },
+          "quantumEfficiency": {
+            "title": "Quantumefficiency",
+            "type": "number"
+          },
+          "readNoiseE": {
+            "title": "Readnoisee",
+            "type": "number"
+          },
+          "readoutS": {
+            "title": "Readouts",
+            "type": "number"
+          },
+          "sensor": {
+            "title": "Sensor",
+            "type": "string"
+          },
+          "sensorHeightPx": {
+            "title": "Sensorheightpx",
+            "type": "integer"
+          },
+          "sensorWidthPx": {
+            "title": "Sensorwidthpx",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "sensor",
+          "color",
+          "pixelSizeUm",
+          "sensorWidthPx",
+          "sensorHeightPx",
+          "quantumEfficiency",
+          "peakQe",
+          "readNoiseE",
+          "darkCurrentEPerS",
+          "readoutS",
+          "notes"
+        ],
+        "title": "CameraPresetOut",
+        "type": "object"
+      },
+      "CameraRequest": {
+        "description": "The sensor. Only fields the calculation actually reads are accepted.",
+        "properties": {
+          "darkCurrentEPerS": {
+            "description": "e-/s/pixel at your set-point",
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Darkcurrentepers",
+            "type": "number"
+          },
+          "pixelSizeUm": {
+            "exclusiveMinimum": 0.5,
+            "maximum": 30.0,
+            "title": "Pixelsizeum",
+            "type": "number"
+          },
+          "quantumEfficiency": {
+            "description": "EFFECTIVE V-band QE; roughly half the mono figure for a colour sensor",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Quantumefficiency",
+            "type": "number"
+          },
+          "readNoiseE": {
+            "description": "e- RMS at the gain you image at",
+            "maximum": 50.0,
+            "minimum": 0.0,
+            "title": "Readnoisee",
+            "type": "number"
+          },
+          "readoutS": {
+            "default": 2.0,
+            "description": "full-frame download time",
+            "maximum": 120.0,
+            "minimum": 0.0,
+            "title": "Readouts",
+            "type": "number"
+          },
+          "sensorHeightPx": {
+            "maximum": 50000.0,
+            "minimum": 64.0,
+            "title": "Sensorheightpx",
+            "type": "integer"
+          },
+          "sensorWidthPx": {
+            "maximum": 50000.0,
+            "minimum": 64.0,
+            "title": "Sensorwidthpx",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pixelSizeUm",
+          "sensorWidthPx",
+          "sensorHeightPx",
+          "quantumEfficiency",
+          "readNoiseE",
+          "darkCurrentEPerS"
+        ],
+        "title": "CameraRequest",
+        "type": "object"
+      },
+      "CatalogObjectOut": {
+        "description": "One catalogue object, for drawing and picking in the sky.",
+        "properties": {
+          "constellation": {
+            "title": "Constellation",
+            "type": "string"
+          },
           "dec": {
             "title": "Dec",
             "type": "string"
@@ -179,6 +443,10 @@
           "decDeg": {
             "title": "Decdeg",
             "type": "number"
+          },
+          "designation": {
+            "title": "Designation",
+            "type": "string"
           },
           "id": {
             "title": "Id",
@@ -188,9 +456,24 @@
             "title": "Magnitude",
             "type": "number"
           },
+          "majorArcmin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Majorarcmin"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "plannable": {
+            "title": "Plannable",
+            "type": "boolean"
           },
           "ra": {
             "title": "Ra",
@@ -199,18 +482,82 @@
           "raDeg": {
             "title": "Radeg",
             "type": "number"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "typeLabel": {
+            "title": "Typelabel",
+            "type": "string"
+          },
+          "vMag": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vmag"
+          },
+          "whyNot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whynot"
           }
         },
         "required": [
           "id",
           "name",
+          "designation",
+          "type",
+          "typeLabel",
+          "constellation",
           "raDeg",
           "decDeg",
           "ra",
           "dec",
-          "magnitude"
+          "majorArcmin",
+          "vMag",
+          "magnitude",
+          "plannable",
+          "whyNot"
         ],
-        "title": "CatalogEntryOut",
+        "title": "CatalogObjectOut",
+        "type": "object"
+      },
+      "CatalogOut": {
+        "properties": {
+          "attribution": {
+            "title": "Attribution",
+            "type": "string"
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogObjectOut"
+            },
+            "title": "Objects",
+            "type": "array"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "size",
+          "objects",
+          "attribution"
+        ],
+        "title": "CatalogOut",
         "type": "object"
       },
       "ChangesOut": {
@@ -298,6 +645,15 @@
             "title": "Index",
             "type": "integer"
           },
+          "kind": {
+            "enum": [
+              "start",
+              "weather",
+              "amend"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "newestPublished": {
             "anyOf": [
               {
@@ -326,6 +682,7 @@
         "required": [
           "index",
           "at",
+          "kind",
           "reason",
           "planId",
           "recordsKnown",
@@ -365,10 +722,37 @@
         "title": "DroppedOut",
         "type": "object"
       },
-      "EquipmentPresetOut": {
+      "EquipmentOut": {
+        "description": "A rig, with every number a panel displays about it.\n\nServed for the preset rigs, for a session's equipment, and by\n``POST /api/equipment/derive`` for a rig that is not a session yet -- so\nthe focal ratio, resolving power and sampling the Specifications panel\nshows are the server's arithmetic, not a second copy of it in the browser.\n\nThe planning form no longer shows any of this. It did, as a grid of tiles\nbeside the inputs, and they were the densest run of uninterpreted figures\non the page: nobody re-reads their own Dawes limit before a session.",
         "properties": {
           "apertureMm": {
             "title": "Aperturemm",
+            "type": "number"
+          },
+          "cameraId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cameraid"
+          },
+          "cameraName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cameraname"
+          },
+          "centralObstructionMm": {
+            "title": "Centralobstructionmm",
             "type": "number"
           },
           "collectingAreaCm2": {
@@ -377,6 +761,14 @@
           },
           "darkCurrentEPerS": {
             "title": "Darkcurrentepers",
+            "type": "number"
+          },
+          "dawesLimitArcsec": {
+            "title": "Daweslimitarcsec",
+            "type": "number"
+          },
+          "diffractionFwhmArcsec": {
+            "title": "Diffractionfwhmarcsec",
             "type": "number"
           },
           "focalLengthMm": {
@@ -407,6 +799,14 @@
             "title": "Name",
             "type": "string"
           },
+          "nativeFocalLengthMm": {
+            "title": "Nativefocallengthmm",
+            "type": "number"
+          },
+          "obstructionFraction": {
+            "title": "Obstructionfraction",
+            "type": "number"
+          },
           "pixelScaleArcsec": {
             "title": "Pixelscalearcsec",
             "type": "number"
@@ -415,17 +815,75 @@
             "title": "Pixelsizeum",
             "type": "number"
           },
+          "psfFwhmArcsec": {
+            "title": "Psffwhmarcsec",
+            "type": "number"
+          },
           "quantumEfficiency": {
             "title": "Quantumefficiency",
+            "type": "number"
+          },
+          "rayleighLimitArcsec": {
+            "title": "Rayleighlimitarcsec",
             "type": "number"
           },
           "readNoiseE": {
             "title": "Readnoisee",
             "type": "number"
           },
+          "readoutS": {
+            "title": "Readouts",
+            "type": "number"
+          },
+          "reducer": {
+            "title": "Reducer",
+            "type": "number"
+          },
+          "referenceSeeingArcsec": {
+            "title": "Referenceseeingarcsec",
+            "type": "number"
+          },
+          "sampling": {
+            "title": "Sampling",
+            "type": "string"
+          },
+          "samplingPxPerFwhm": {
+            "title": "Samplingpxperfwhm",
+            "type": "number"
+          },
+          "sensorHeightPx": {
+            "title": "Sensorheightpx",
+            "type": "integer"
+          },
+          "sensorWidthPx": {
+            "title": "Sensorwidthpx",
+            "type": "integer"
+          },
           "switchMinutes": {
             "title": "Switchminutes",
             "type": "number"
+          },
+          "telescopeId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telescopeid"
+          },
+          "telescopeName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telescopename"
           },
           "throughput": {
             "title": "Throughput",
@@ -435,22 +893,119 @@
         "required": [
           "id",
           "name",
+          "telescopeId",
+          "telescopeName",
+          "cameraId",
+          "cameraName",
           "apertureMm",
+          "nativeFocalLengthMm",
+          "reducer",
           "focalLengthMm",
           "focalRatio",
+          "centralObstructionMm",
+          "obstructionFraction",
           "collectingAreaCm2",
           "throughput",
+          "dawesLimitArcsec",
+          "rayleighLimitArcsec",
+          "diffractionFwhmArcsec",
+          "referenceSeeingArcsec",
+          "psfFwhmArcsec",
+          "samplingPxPerFwhm",
+          "sampling",
           "pixelSizeUm",
+          "sensorWidthPx",
+          "sensorHeightPx",
           "pixelScaleArcsec",
           "fovWidthDeg",
           "fovHeightDeg",
+          "quantumEfficiency",
           "readNoiseE",
           "darkCurrentEPerS",
-          "quantumEfficiency",
+          "readoutS",
           "switchMinutes",
           "minBlockMinutes"
         ],
-        "title": "EquipmentPresetOut",
+        "title": "EquipmentOut",
+        "type": "object"
+      },
+      "EquipmentRequest": {
+        "description": "A full rig. Overrides ``equipmentId`` wherever both are sent.",
+        "properties": {
+          "camera": {
+            "$ref": "#/components/schemas/CameraRequest"
+          },
+          "cameraId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the camera preset this started from, for display only",
+            "title": "Cameraid"
+          },
+          "cameraName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "display label for the camera when it no longer matches a preset",
+            "title": "Cameraname"
+          },
+          "mount": {
+            "$ref": "#/components/schemas/MountRequest"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "optics": {
+            "$ref": "#/components/schemas/OpticsRequest"
+          },
+          "telescopeId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the telescope preset this started from, for display only",
+            "title": "Telescopeid"
+          },
+          "telescopeName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "display label for the telescope when it no longer matches a preset",
+            "title": "Telescopename"
+          }
+        },
+        "required": [
+          "optics",
+          "camera"
+        ],
+        "title": "EquipmentRequest",
         "type": "object"
       },
       "EvidenceOut": {
@@ -497,46 +1052,88 @@
         "title": "EvidenceOut",
         "type": "object"
       },
-      "GridOut": {
+      "GeometryOut": {
+        "description": "Where everything is, all night -- served once and cached forever.\n\nFive of the seven arrays the heatmap used to carry never change between\ndecision points, because geometry does not depend on the weather. Serving\nthem from ``/grid`` meant refetching a quarter-megabyte of identical\nnumbers on every scrub past a forecast run. They live here instead, behind\nan ETag, and ``/grid`` carries only what the weather decides.",
         "properties": {
-          "end": {
-            "format": "date-time",
-            "title": "End",
+          "frameQuat": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Framequat",
+            "type": "array"
+          },
+          "geometryId": {
+            "title": "Geometryid",
             "type": "string"
+          },
+          "lstHours": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Lsthours",
+            "type": "array"
+          },
+          "moon": {
+            "$ref": "#/components/schemas/MoonOut"
           },
           "nSlots": {
             "title": "Nslots",
             "type": "integer"
           },
-          "slotMinutes": {
-            "title": "Slotminutes",
-            "type": "integer"
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/GeometryRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
           },
-          "slotStarts": {
+          "sessionId": {
+            "title": "Sessionid",
+            "type": "string"
+          },
+          "slotMids": {
             "items": {
               "format": "date-time",
               "type": "string"
             },
-            "title": "Slotstarts",
+            "title": "Slotmids",
             "type": "array"
           },
-          "start": {
-            "format": "date-time",
-            "title": "Start",
-            "type": "string"
+          "sunAltitudeDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Sunaltitudedeg",
+            "type": "array"
+          },
+          "sunAzimuthDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Sunazimuthdeg",
+            "type": "array"
           }
         },
         "required": [
-          "start",
-          "end",
-          "slotMinutes",
+          "sessionId",
+          "geometryId",
           "nSlots",
-          "slotStarts"
+          "slotMids",
+          "lstHours",
+          "frameQuat",
+          "sunAltitudeDeg",
+          "sunAzimuthDeg",
+          "moon",
+          "rows"
         ],
-        "title": "GridOut",
+        "title": "GeometryOut",
         "type": "object"
       },
-      "GridRowOut": {
+      "GeometryRowOut": {
+        "description": "Per target, as_of-independent. Byte-identical at every decision point.",
         "properties": {
           "airmass": {
             "items": {
@@ -559,12 +1156,9 @@
             "title": "Azimuthdeg",
             "type": "array"
           },
-          "efficiency": {
-            "items": {
-              "type": "number"
-            },
-            "title": "Efficiency",
-            "type": "array"
+          "decDeg": {
+            "title": "Decdeg",
+            "type": "number"
           },
           "moonSeparationDeg": {
             "items": {
@@ -577,12 +1171,9 @@
             "title": "Name",
             "type": "string"
           },
-          "preference": {
-            "items": {
-              "type": "number"
-            },
-            "title": "Preference",
-            "type": "array"
+          "raDeg": {
+            "title": "Radeg",
+            "type": "number"
           },
           "targetId": {
             "title": "Targetid",
@@ -599,13 +1190,131 @@
         "required": [
           "targetId",
           "name",
-          "efficiency",
-          "preference",
+          "raDeg",
+          "decDeg",
           "altitudeDeg",
           "azimuthDeg",
           "airmass",
           "moonSeparationDeg",
           "visible"
+        ],
+        "title": "GeometryRowOut",
+        "type": "object"
+      },
+      "GridOut": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "nSlots": {
+            "title": "Nslots",
+            "type": "integer"
+          },
+          "slotMids": {
+            "items": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "title": "Slotmids",
+            "type": "array"
+          },
+          "slotMinutes": {
+            "title": "Slotminutes",
+            "type": "integer"
+          },
+          "slotSeconds": {
+            "title": "Slotseconds",
+            "type": "number"
+          },
+          "slotStarts": {
+            "items": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "title": "Slotstarts",
+            "type": "array"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "slotMinutes",
+          "slotSeconds",
+          "nSlots",
+          "slotStarts",
+          "slotMids"
+        ],
+        "title": "GridOut",
+        "type": "object"
+      },
+      "GridRowOut": {
+        "description": "Per target, what the WEATHER decides. Geometry is on ``/geometry``.",
+        "properties": {
+          "efficiency": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Efficiency",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "preference": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Preference",
+            "type": "array"
+          },
+          "preferenceFactors": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Preferencefactors",
+            "type": "object"
+          },
+          "skyComponentsNl": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Skycomponentsnl",
+            "type": "object"
+          },
+          "skyMagArcsec2": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Skymagarcsec2",
+            "type": "array"
+          },
+          "targetId": {
+            "title": "Targetid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "name",
+          "efficiency",
+          "preference",
+          "preferenceFactors",
+          "skyMagArcsec2",
+          "skyComponentsNl"
         ],
         "title": "GridRowOut",
         "type": "object"
@@ -665,6 +1374,136 @@
           "settings"
         ],
         "title": "HealthOut",
+        "type": "object"
+      },
+      "LiveOut": {
+        "description": "How the server keeps a night that is still happening current.\n\nPresent only for a night that had not ended when the session was created.\nSuch a night cannot be folded once: the data that will decide its second\nhalf has not been published. So the server WATCHES it -- every\n``every_minutes`` it asks the weather source whether anything new exists,\nand when something does it re-plans at the moment it learned it and\nappends that as a decision point. These fields exist so the observer can\nsee the watch working rather than take it on trust.",
+        "properties": {
+          "checks": {
+            "title": "Checks",
+            "type": "integer"
+          },
+          "everyMinutes": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Everyminutes"
+          },
+          "following": {
+            "title": "Following",
+            "type": "boolean"
+          },
+          "lastCheckedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastcheckedat"
+          },
+          "lastError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lasterror"
+          },
+          "lastResult": {
+            "title": "Lastresult",
+            "type": "string"
+          },
+          "nextCheckAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcheckat"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "updates": {
+            "title": "Updates",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "following",
+          "everyMinutes",
+          "checks",
+          "updates",
+          "revision",
+          "lastCheckedAt",
+          "nextCheckAt",
+          "lastResult",
+          "lastError"
+        ],
+        "title": "LiveOut",
+        "type": "object"
+      },
+      "LocationOut": {
+        "description": "A coordinate, decorated. ``GET /api/site/locate``.\n\nThe two nullable fields are looked up from services that may be down, and\nneither is needed for the site to be planned: the latitude and longitude\nechoed back are the answer, and they are the ones that were asked about.\nA null ``name`` means \"we could not find out\", never \"nowhere\".",
+        "properties": {
+          "attribution": {
+            "title": "Attribution",
+            "type": "string"
+          },
+          "elevationM": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elevationm"
+          },
+          "latitudeDeg": {
+            "title": "Latitudedeg",
+            "type": "number"
+          },
+          "longitudeDeg": {
+            "title": "Longitudedeg",
+            "type": "number"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "latitudeDeg",
+          "longitudeDeg",
+          "attribution"
+        ],
+        "title": "LocationOut",
         "type": "object"
       },
       "MoonOut": {
@@ -736,6 +1575,238 @@
         "title": "MoonOut",
         "type": "object"
       },
+      "MountOut": {
+        "properties": {
+          "minBlockMinutes": {
+            "title": "Minblockminutes",
+            "type": "number"
+          },
+          "switchMinutes": {
+            "title": "Switchminutes",
+            "type": "number"
+          }
+        },
+        "required": [
+          "switchMinutes",
+          "minBlockMinutes"
+        ],
+        "title": "MountOut",
+        "type": "object"
+      },
+      "MountRequest": {
+        "properties": {
+          "minBlockMinutes": {
+            "default": 20.0,
+            "maximum": 240.0,
+            "minimum": 1.0,
+            "title": "Minblockminutes",
+            "type": "number"
+          },
+          "switchMinutes": {
+            "default": 5.0,
+            "description": "slew, centre and refocus on a new target",
+            "maximum": 60.0,
+            "minimum": 0.0,
+            "title": "Switchminutes",
+            "type": "number"
+          }
+        },
+        "title": "MountRequest",
+        "type": "object"
+      },
+      "NightWindowOut": {
+        "description": "Twilight boundaries, so the setup form never computes astronomy.",
+        "properties": {
+          "alwaysUp": {
+            "title": "Alwaysup",
+            "type": "boolean"
+          },
+          "darkHours": {
+            "title": "Darkhours",
+            "type": "number"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "dawn": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dawn"
+          },
+          "dusk": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dusk"
+          },
+          "neverRises": {
+            "title": "Neverrises",
+            "type": "boolean"
+          },
+          "suggestedHours": {
+            "title": "Suggestedhours",
+            "type": "number"
+          },
+          "suggestedStart": {
+            "format": "date-time",
+            "title": "Suggestedstart",
+            "type": "string"
+          },
+          "sunrise": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sunrise"
+          },
+          "sunset": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sunset"
+          },
+          "utcOffsetHours": {
+            "title": "Utcoffsethours",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "sunset",
+          "dusk",
+          "dawn",
+          "sunrise",
+          "darkHours",
+          "utcOffsetHours",
+          "alwaysUp",
+          "neverRises",
+          "suggestedStart",
+          "suggestedHours"
+        ],
+        "title": "NightWindowOut",
+        "type": "object"
+      },
+      "OpticsRequest": {
+        "description": "The telescope, as the exposure calculator sees it.\n\nFocal ratio is not a field: it is ``focal_length / aperture`` and accepting\nit as well would allow a request that contradicts itself. The form offers\nit as an input, and turns it into a focal length before it gets here.",
+        "properties": {
+          "apertureMm": {
+            "description": "clear aperture",
+            "exclusiveMinimum": 10.0,
+            "maximum": 2000.0,
+            "title": "Aperturemm",
+            "type": "number"
+          },
+          "centralObstructionMm": {
+            "default": 0.0,
+            "description": "DIAMETER of the secondary obstruction; 0 for a refractor",
+            "minimum": 0.0,
+            "title": "Centralobstructionmm",
+            "type": "number"
+          },
+          "focalLengthMm": {
+            "description": "NATIVE focal length, before any reducer or Barlow",
+            "exclusiveMinimum": 20.0,
+            "maximum": 30000.0,
+            "title": "Focallengthmm",
+            "type": "number"
+          },
+          "reducer": {
+            "default": 1.0,
+            "description": "focal-length multiplier: 0.63 for a reducer, 2.0 for a Barlow, 1 for none",
+            "maximum": 5.0,
+            "minimum": 0.2,
+            "title": "Reducer",
+            "type": "number"
+          },
+          "throughput": {
+            "default": 0.8,
+            "description": "total optical transmission in V, an estimate",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Throughput",
+            "type": "number"
+          }
+        },
+        "required": [
+          "apertureMm",
+          "focalLengthMm"
+        ],
+        "title": "OpticsRequest",
+        "type": "object"
+      },
+      "OutlookNoteOut": {
+        "properties": {
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "text"
+        ],
+        "title": "OutlookNoteOut",
+        "type": "object"
+      },
+      "OutlookWindowOut": {
+        "properties": {
+          "endsAt": {
+            "format": "date-time",
+            "title": "Endsat",
+            "type": "string"
+          },
+          "hours": {
+            "title": "Hours",
+            "type": "number"
+          },
+          "meanCloudFraction": {
+            "title": "Meancloudfraction",
+            "type": "number"
+          },
+          "startsAt": {
+            "format": "date-time",
+            "title": "Startsat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "startsAt",
+          "endsAt",
+          "hours",
+          "meanCloudFraction"
+        ],
+        "title": "OutlookWindowOut",
+        "type": "object"
+      },
       "PlanOut": {
         "properties": {
           "asOf": {
@@ -786,6 +1857,9 @@
             "title": "Objective",
             "type": "number"
           },
+          "outlook": {
+            "$ref": "#/components/schemas/WeatherOutlookOut"
+          },
           "planId": {
             "title": "Planid",
             "type": "string"
@@ -811,6 +1885,9 @@
           "sessionId": {
             "title": "Sessionid",
             "type": "string"
+          },
+          "slotWeather": {
+            "$ref": "#/components/schemas/SlotWeatherOut"
           },
           "slots": {
             "items": {
@@ -863,19 +1940,104 @@
           "cloudFraction",
           "seeingFwhmArcsec",
           "evidence",
-          "changes"
+          "changes",
+          "outlook"
         ],
         "title": "PlanOut",
         "type": "object"
       },
+      "PlanetOut": {
+        "properties": {
+          "altitudeDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Altitudedeg",
+            "type": "array"
+          },
+          "azimuthDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Azimuthdeg",
+            "type": "array"
+          },
+          "dec": {
+            "title": "Dec",
+            "type": "string"
+          },
+          "decDeg": {
+            "title": "Decdeg",
+            "type": "number"
+          },
+          "distanceAu": {
+            "title": "Distanceau",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "magnitude": {
+            "title": "Magnitude",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "phaseAngleDeg": {
+            "title": "Phaseangledeg",
+            "type": "number"
+          },
+          "ra": {
+            "title": "Ra",
+            "type": "string"
+          },
+          "raDeg": {
+            "title": "Radeg",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "altitudeDeg",
+          "azimuthDeg",
+          "raDeg",
+          "decDeg",
+          "ra",
+          "dec",
+          "magnitude",
+          "distanceAu",
+          "phaseAngleDeg"
+        ],
+        "title": "PlanetOut",
+        "type": "object"
+      },
       "PresetsOut": {
         "properties": {
-          "catalog": {
+          "cameras": {
             "items": {
-              "$ref": "#/components/schemas/CatalogEntryOut"
+              "$ref": "#/components/schemas/CameraPresetOut"
             },
-            "title": "Catalog",
+            "title": "Cameras",
             "type": "array"
+          },
+          "catalogAttribution": {
+            "title": "Catalogattribution",
+            "type": "string"
+          },
+          "catalogSize": {
+            "title": "Catalogsize",
+            "type": "integer"
+          },
+          "defaultCameraId": {
+            "title": "Defaultcameraid",
+            "type": "string"
+          },
+          "defaultMount": {
+            "$ref": "#/components/schemas/MountOut"
           },
           "defaultTargetIds": {
             "items": {
@@ -884,9 +2046,13 @@
             "title": "Defaulttargetids",
             "type": "array"
           },
+          "defaultTelescopeId": {
+            "title": "Defaulttelescopeid",
+            "type": "string"
+          },
           "equipment": {
             "items": {
-              "$ref": "#/components/schemas/EquipmentPresetOut"
+              "$ref": "#/components/schemas/EquipmentOut"
             },
             "title": "Equipment",
             "type": "array"
@@ -897,13 +2063,26 @@
             },
             "title": "Sites",
             "type": "array"
+          },
+          "telescopes": {
+            "items": {
+              "$ref": "#/components/schemas/TelescopePresetOut"
+            },
+            "title": "Telescopes",
+            "type": "array"
           }
         },
         "required": [
           "sites",
           "equipment",
-          "catalog",
-          "defaultTargetIds"
+          "telescopes",
+          "cameras",
+          "defaultTelescopeId",
+          "defaultCameraId",
+          "defaultMount",
+          "defaultTargetIds",
+          "catalogSize",
+          "catalogAttribution"
         ],
         "title": "PresetsOut",
         "type": "object"
@@ -959,6 +2138,146 @@
           "seeingFwhmArcsec"
         ],
         "title": "QualityGridOut",
+        "type": "object"
+      },
+      "SatellitePassOut": {
+        "description": "One satellite's continuous stretch above the horizon, every ``stepSeconds``.",
+        "properties": {
+          "altitudeDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Altitudedeg",
+            "type": "array"
+          },
+          "azimuthDeg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Azimuthdeg",
+            "type": "array"
+          },
+          "magnitude": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Magnitude",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "noradId": {
+            "title": "Noradid",
+            "type": "integer"
+          },
+          "rangeKm": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Rangekm",
+            "type": "array"
+          },
+          "startsAt": {
+            "format": "date-time",
+            "title": "Startsat",
+            "type": "string"
+          },
+          "stepSeconds": {
+            "title": "Stepseconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "noradId",
+          "name",
+          "startsAt",
+          "stepSeconds",
+          "altitudeDeg",
+          "azimuthDeg",
+          "magnitude",
+          "rangeKm"
+        ],
+        "title": "SatellitePassOut",
+        "type": "object"
+      },
+      "SatellitesOut": {
+        "description": "Satellites crossing this night's sky. Display only -- see ``/sky``.\n\nElements are the CURRENT CelesTrak set, propagated to the night. That is\nexact for tonight and an increasingly rough estimate for a replay days in\nthe past, which is why the provenance travels with the payload.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "elementsPublishedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elementspublishedat"
+          },
+          "epochSpreadDays": {
+            "title": "Epochspreaddays",
+            "type": "number"
+          },
+          "nObjects": {
+            "title": "Nobjects",
+            "type": "integer"
+          },
+          "passes": {
+            "items": {
+              "$ref": "#/components/schemas/SatellitePassOut"
+            },
+            "title": "Passes",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "sessionId": {
+            "title": "Sessionid",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "stepSeconds": {
+            "title": "Stepseconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "sessionId",
+          "available",
+          "source",
+          "elementsPublishedAt",
+          "epochSpreadDays",
+          "nObjects",
+          "stepSeconds",
+          "passes"
+        ],
+        "title": "SatellitesOut",
         "type": "object"
       },
       "SessionListItemOut": {
@@ -1025,7 +2344,7 @@
             "type": "integer"
           },
           "equipment": {
-            "$ref": "#/components/schemas/EquipmentPresetOut"
+            "$ref": "#/components/schemas/EquipmentOut"
           },
           "error": {
             "anyOf": [
@@ -1048,6 +2367,16 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "live": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "message": {
             "title": "Message",
@@ -1092,6 +2421,9 @@
             "title": "Twilight",
             "type": "array"
           },
+          "weather": {
+            "$ref": "#/components/schemas/WeatherSourceOut"
+          },
           "weatherSource": {
             "title": "Weathersource",
             "type": "string"
@@ -1109,6 +2441,7 @@
           "grid",
           "targets",
           "weatherSource",
+          "weather",
           "sunAltitudeDeg",
           "twilight",
           "moon",
@@ -1125,6 +2458,17 @@
             "description": "night start date, UTC, YYYY-MM-DD",
             "title": "Date",
             "type": "string"
+          },
+          "equipment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EquipmentRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "overrides equipmentId when present"
           },
           "equipmentId": {
             "default": "sct8-2600mm",
@@ -1180,7 +2524,8 @@
             "type": "integer"
           },
           "snrGoal": {
-            "default": 60.0,
+            "default": 15.0,
+            "description": "per star-sized patch of the target's surface, at its MEAN brightness",
             "exclusiveMinimum": 0.0,
             "title": "Snrgoal",
             "type": "number"
@@ -1220,8 +2565,8 @@
             "title": "Targets"
           },
           "weather": {
-            "default": "synthetic",
-            "description": "'synthetic' (offline, deterministic) or 'open_meteo' (real archived runs)",
+            "default": "auto",
+            "description": "'auto' (real data, chosen by when the night is: archived model runs for a past night, the live forecast for tonight or a coming night), 'synthetic' (offline and deterministic -- tests and demos only), or 'open_meteo' (archived runs only)",
             "title": "Weather",
             "type": "string"
           }
@@ -1262,6 +2607,14 @@
             "title": "Longitudedeg",
             "type": "number"
           },
+          "minAltitudeDeg": {
+            "title": "Minaltitudedeg",
+            "type": "number"
+          },
+          "minMoonSeparationDeg": {
+            "title": "Minmoonseparationdeg",
+            "type": "number"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1280,7 +2633,9 @@
           "bortle",
           "extinctionK",
           "artificialZenithNl",
-          "zenithSkyMagArcsec2"
+          "zenithSkyMagArcsec2",
+          "minAltitudeDeg",
+          "minMoonSeparationDeg"
         ],
         "title": "SitePresetOut",
         "type": "object"
@@ -1346,6 +2701,49 @@
         "title": "SiteRequest",
         "type": "object"
       },
+      "SkyOut": {
+        "description": "The sky around the plan: planets, and how dark it is.\n\nDisplay only -- nothing here reaches a plan -- and weather-independent, so\nlike ``/geometry`` it takes no ``as_of`` and is served once per session.",
+        "properties": {
+          "nSlots": {
+            "title": "Nslots",
+            "type": "integer"
+          },
+          "nakedEyeLimitMag": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Nakedeyelimitmag",
+            "type": "array"
+          },
+          "planets": {
+            "items": {
+              "$ref": "#/components/schemas/PlanetOut"
+            },
+            "title": "Planets",
+            "type": "array"
+          },
+          "sessionId": {
+            "title": "Sessionid",
+            "type": "string"
+          },
+          "zenithSkyMagArcsec2": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Zenithskymagarcsec2",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessionId",
+          "nSlots",
+          "planets",
+          "zenithSkyMagArcsec2",
+          "nakedEyeLimitMag"
+        ],
+        "title": "SkyOut",
+        "type": "object"
+      },
       "SlotOut": {
         "properties": {
           "kind": {
@@ -1381,6 +2779,162 @@
         "title": "SlotOut",
         "type": "object"
       },
+      "SlotWeatherOut": {
+        "description": "The forecast in force at this plan's decision point, one value per slot\n(aligned with ``PlanOut.slots``), for everything the source forecasts\nbeyond cloud. ``None`` means the source did not say -- never a guess.\nCloud totals and seeing are ``PlanOut.cloudFraction`` / ``seeingFwhmArcsec``.",
+        "properties": {
+          "basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis"
+          },
+          "cloudHigh": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Cloudhigh",
+            "type": "array"
+          },
+          "cloudLow": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Cloudlow",
+            "type": "array"
+          },
+          "cloudMid": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Cloudmid",
+            "type": "array"
+          },
+          "covered": {
+            "items": {
+              "type": "boolean"
+            },
+            "title": "Covered",
+            "type": "array"
+          },
+          "dewPointC": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Dewpointc",
+            "type": "array"
+          },
+          "humidity": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Humidity",
+            "type": "array"
+          },
+          "precipitationMm": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Precipitationmm",
+            "type": "array"
+          },
+          "seeingForecast": {
+            "default": false,
+            "title": "Seeingforecast",
+            "type": "boolean"
+          },
+          "temperatureC": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Temperaturec",
+            "type": "array"
+          },
+          "windGustMs": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Windgustms",
+            "type": "array"
+          },
+          "windMs": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Windms",
+            "type": "array"
+          }
+        },
+        "title": "SlotWeatherOut",
+        "type": "object"
+      },
       "TargetOut": {
         "properties": {
           "dec": {
@@ -1391,9 +2945,36 @@
             "title": "Decdeg",
             "type": "number"
           },
+          "firstUsableSlot": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firstusableslot"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "isPointSource": {
+            "default": false,
+            "title": "Ispointsource",
+            "type": "boolean"
+          },
+          "lastUsableSlot": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastusableslot"
           },
           "magnitude": {
             "title": "Magnitude",
@@ -1422,6 +3003,28 @@
           "requiredRefMinutes": {
             "title": "Requiredrefminutes",
             "type": "number"
+          },
+          "riseSlot": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Riseslot"
+          },
+          "setSlot": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setslot"
           },
           "snrGoal": {
             "title": "Snrgoal",
@@ -1461,7 +3064,11 @@
           "requiredRefMinutes",
           "visibleSlots",
           "maxAltitudeDeg",
-          "transitSlot"
+          "transitSlot",
+          "riseSlot",
+          "setSlot",
+          "firstUsableSlot",
+          "lastUsableSlot"
         ],
         "title": "TargetOut",
         "type": "object"
@@ -1605,6 +3212,558 @@
         "title": "TargetRequest",
         "type": "object"
       },
+      "TargetSuggestionOut": {
+        "description": "One catalogue object, and what tonight holds for it.\n\nPositions come from the same per-slot horizon rotation the globe is drawn\nwith, applied to the whole catalogue at once; they agree with a session's\nastropy geometry to about an arcminute, which is ample for ranking and is\nnot what the scheduler plans from -- a chosen target is recomputed exactly\nwhen the session is built.",
+        "properties": {
+          "bestAltitudeDeg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bestaltitudedeg"
+          },
+          "bestAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bestat"
+          },
+          "caldwell": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caldwell"
+          },
+          "commonName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commonname"
+          },
+          "constellation": {
+            "title": "Constellation",
+            "type": "string"
+          },
+          "dec": {
+            "title": "Dec",
+            "type": "string"
+          },
+          "decDeg": {
+            "title": "Decdeg",
+            "type": "number"
+          },
+          "designation": {
+            "title": "Designation",
+            "type": "string"
+          },
+          "feasible": {
+            "title": "Feasible",
+            "type": "boolean"
+          },
+          "framing": {
+            "title": "Framing",
+            "type": "string"
+          },
+          "framingFill": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framingfill"
+          },
+          "hoursToGoal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hourstogoal"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "magnitude": {
+            "title": "Magnitude",
+            "type": "number"
+          },
+          "magnitudeEstimated": {
+            "title": "Magnitudeestimated",
+            "type": "boolean"
+          },
+          "majorArcmin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Majorarcmin"
+          },
+          "maxAltitudeDeg": {
+            "title": "Maxaltitudedeg",
+            "type": "number"
+          },
+          "messier": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messier"
+          },
+          "minorArcmin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minorarcmin"
+          },
+          "moonSeparationDeg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moonseparationdeg"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "plannable": {
+            "title": "Plannable",
+            "type": "boolean"
+          },
+          "ra": {
+            "title": "Ra",
+            "type": "string"
+          },
+          "raDeg": {
+            "title": "Radeg",
+            "type": "number"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "searchText": {
+            "title": "Searchtext",
+            "type": "string"
+          },
+          "transitAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transitat"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "typeLabel": {
+            "title": "Typelabel",
+            "type": "string"
+          },
+          "usableFrom": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usablefrom"
+          },
+          "usableHours": {
+            "title": "Usablehours",
+            "type": "number"
+          },
+          "usableUntil": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usableuntil"
+          },
+          "vMag": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vmag"
+          },
+          "visible": {
+            "title": "Visible",
+            "type": "boolean"
+          },
+          "whyNot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whynot"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "designation",
+          "commonName",
+          "searchText",
+          "type",
+          "typeLabel",
+          "constellation",
+          "raDeg",
+          "decDeg",
+          "ra",
+          "dec",
+          "majorArcmin",
+          "minorArcmin",
+          "vMag",
+          "magnitude",
+          "magnitudeEstimated",
+          "messier",
+          "caldwell",
+          "plannable",
+          "visible",
+          "usableHours",
+          "maxAltitudeDeg",
+          "bestAt",
+          "usableFrom",
+          "usableUntil",
+          "transitAt",
+          "moonSeparationDeg",
+          "whyNot",
+          "framing",
+          "framingFill",
+          "hoursToGoal",
+          "feasible",
+          "score",
+          "reasons"
+        ],
+        "title": "TargetSuggestionOut",
+        "type": "object"
+      },
+      "TelescopePresetOut": {
+        "properties": {
+          "apertureMm": {
+            "title": "Aperturemm",
+            "type": "number"
+          },
+          "centralObstructionMm": {
+            "title": "Centralobstructionmm",
+            "type": "number"
+          },
+          "dawesLimitArcsec": {
+            "title": "Daweslimitarcsec",
+            "type": "number"
+          },
+          "design": {
+            "title": "Design",
+            "type": "string"
+          },
+          "focalLengthMm": {
+            "title": "Focallengthmm",
+            "type": "number"
+          },
+          "focalRatio": {
+            "title": "Focalratio",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "manufacturer": {
+            "title": "Manufacturer",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Notes",
+            "type": "string"
+          },
+          "reducer": {
+            "title": "Reducer",
+            "type": "number"
+          },
+          "throughput": {
+            "title": "Throughput",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "manufacturer",
+          "design",
+          "apertureMm",
+          "focalLengthMm",
+          "reducer",
+          "focalRatio",
+          "centralObstructionMm",
+          "throughput",
+          "dawesLimitArcsec",
+          "notes"
+        ],
+        "title": "TelescopePresetOut",
+        "type": "object"
+      },
+      "TonightOut": {
+        "properties": {
+          "attribution": {
+            "title": "Attribution",
+            "type": "string"
+          },
+          "catalogSize": {
+            "title": "Catalogsize",
+            "type": "integer"
+          },
+          "darkHours": {
+            "title": "Darkhours",
+            "type": "number"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "fovHeightDeg": {
+            "title": "Fovheightdeg",
+            "type": "number"
+          },
+          "fovWidthDeg": {
+            "title": "Fovwidthdeg",
+            "type": "number"
+          },
+          "moonIllumination": {
+            "title": "Moonillumination",
+            "type": "number"
+          },
+          "moonUpHours": {
+            "title": "Moonuphours",
+            "type": "number"
+          },
+          "rankingNote": {
+            "title": "Rankingnote",
+            "type": "string"
+          },
+          "recommendedIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommendedids",
+            "type": "array"
+          },
+          "siteName": {
+            "title": "Sitename",
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/TargetSuggestionOut"
+            },
+            "title": "Targets",
+            "type": "array"
+          },
+          "visibleCount": {
+            "title": "Visiblecount",
+            "type": "integer"
+          },
+          "windowEnd": {
+            "format": "date-time",
+            "title": "Windowend",
+            "type": "string"
+          },
+          "windowStart": {
+            "format": "date-time",
+            "title": "Windowstart",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "siteName",
+          "windowStart",
+          "windowEnd",
+          "darkHours",
+          "moonIllumination",
+          "moonUpHours",
+          "fovWidthDeg",
+          "fovHeightDeg",
+          "catalogSize",
+          "visibleCount",
+          "recommendedIds",
+          "targets",
+          "attribution",
+          "rankingNote"
+        ],
+        "title": "TonightOut",
+        "type": "object"
+      },
+      "TonightRequest": {
+        "description": "What is worth imaging from a site on a night, with a given rig.",
+        "properties": {
+          "date": {
+            "description": "night start date, YYYY-MM-DD, local to the site",
+            "title": "Date",
+            "type": "string"
+          },
+          "equipment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EquipmentRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "overrides equipmentId when present"
+          },
+          "equipmentId": {
+            "default": "sct8-2600mm",
+            "title": "Equipmentid",
+            "type": "string"
+          },
+          "hours": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 16.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "window length; omitted means dusk to dawn",
+            "title": "Hours"
+          },
+          "site": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SiteRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "overrides siteId when present"
+          },
+          "siteId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "urbana",
+            "title": "Siteid"
+          },
+          "snrGoal": {
+            "default": 15.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Snrgoal",
+            "type": "number"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "window start; omitted means astronomical dusk",
+            "title": "Start"
+          },
+          "tSubS": {
+            "default": 90.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Tsubs",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "TonightRequest",
+        "type": "object"
+      },
       "TwilightBandOut": {
         "properties": {
           "endsAt": {
@@ -1686,6 +3845,16 @@
             "title": "Action",
             "type": "string"
           },
+          "category": {
+            "enum": [
+              "weather",
+              "moon",
+              "horizon",
+              "exposure"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
           "severity": {
             "title": "Severity",
             "type": "string"
@@ -1697,10 +3866,195 @@
         },
         "required": [
           "severity",
+          "category",
           "text",
           "action"
         ],
         "title": "WarningOut",
+        "type": "object"
+      },
+      "WeatherOutlookOut": {
+        "description": "A plain-language read of the forecast, as it stood at this plan's as_of.\n\nLives on the PLAN rather than the session so it obeys the same rule as\neverything else: scrub back to dusk and it says what was knowable at dusk.\nSummarises only the dark part of the window, because cloud at 7 p.m. in\ncivil twilight is not what anyone setting up a telescope is asking about.",
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "bestWindow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OutlookWindowOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "clearHours": {
+            "title": "Clearhours",
+            "type": "number"
+          },
+          "darkHours": {
+            "title": "Darkhours",
+            "type": "number"
+          },
+          "dewSpreadMinC": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dewspreadminc"
+          },
+          "hasData": {
+            "title": "Hasdata",
+            "type": "boolean"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "humidityMax": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Humiditymax"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "meanCloudFraction": {
+            "title": "Meancloudfraction",
+            "type": "number"
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/OutlookNoteOut"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          },
+          "verdictText": {
+            "title": "Verdicttext",
+            "type": "string"
+          },
+          "windMaxMs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Windmaxms"
+          }
+        },
+        "required": [
+          "asOf",
+          "hasData",
+          "basis",
+          "category",
+          "label",
+          "headline",
+          "verdict",
+          "verdictText",
+          "darkHours",
+          "clearHours",
+          "meanCloudFraction",
+          "bestWindow",
+          "humidityMax",
+          "dewSpreadMinC",
+          "windMaxMs",
+          "notes"
+        ],
+        "title": "WeatherOutlookOut",
+        "type": "object"
+      },
+      "WeatherSourceOut": {
+        "description": "Where this night's weather came from, and how far it can be trusted.\n\nResolved once, when the session is created, from when the night is\nrelative to the wall clock -- the one decision in the weather path that\nlegitimately needs \"now\". Every plan built from it still applies the\npublication gate at its own as_of.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "fetchedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetchedat"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "string"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requested",
+          "mode",
+          "label",
+          "description",
+          "model",
+          "fetchedAt",
+          "runs",
+          "records"
+        ],
+        "title": "WeatherSourceOut",
         "type": "object"
       }
     }
@@ -1712,6 +4066,92 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/catalog": {
+      "get": {
+        "description": "Every catalogue object with its position, for the sky to draw and\npick from. Fixed for the life of the process, and cached as such.",
+        "operationId": "get_catalog_api_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Catalog",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/catalog/notice": {
+      "get": {
+        "description": "The catalogue's licence notice: the CC BY-SA 4.0 attribution for\nOpenNGC, what this project changed, and the Sharpless acknowledgement.\nLinked from wherever the catalogue is shown.",
+        "operationId": "catalog_notice_api_catalog_notice_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Catalog Notice",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/equipment/derive": {
+      "post": {
+        "description": "A rig's derived figures, for a rig that is not a session yet.\n\nFocal ratio, resolving power, star size and sampling are one line of\narithmetic each, and exactly the kind of number a browser copy would\nround differently from the one the scheduler uses. No caller in the\nfrontend is left: the planning form stopped showing these. Kept\nbecause the arithmetic belongs on this side of the wire whenever\nsomething asks for it again.",
+        "operationId": "derive_equipment_api_equipment_derive_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EquipmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EquipmentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Derive Equipment",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
     "/api/events": {
       "get": {
         "description": "Server-sent notifications. Handlers should do one thing: refetch.\n\nNothing here carries plan data, so live and replay share a single\nfetching path and the whole stream can be swapped for a poll.",
@@ -1748,6 +4188,85 @@
           }
         },
         "summary": "Health",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/night-window": {
+      "get": {
+        "description": "Astronomical dusk and dawn, so the client asks rather than derives.\n\nThe night that BEGINS on ``date``, anchored on local solar noon -- at\nlongitude -155 that night is mostly the following day in UTC, and\nanchoring on UTC midnight shifts every default by a day for anyone\nwest of Greenwich.",
+        "operationId": "get_night_window_api_night_window_get",
+        "parameters": [
+          {
+            "description": "night start date, YYYY-MM-DD, local to the site",
+            "in": "query",
+            "name": "date",
+            "required": true,
+            "schema": {
+              "description": "night start date, YYYY-MM-DD, local to the site",
+              "title": "Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "maximum": 90,
+              "minimum": -90,
+              "title": "Lat",
+              "type": "number"
+            }
+          },
+          {
+            "description": "positive EAST",
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "description": "positive EAST",
+              "maximum": 360,
+              "minimum": -180,
+              "title": "Lon",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "elevation_m",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "title": "Elevation M",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NightWindowOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Night Window",
         "tags": [
           "meta"
         ]
@@ -1913,6 +4432,49 @@
         ]
       }
     },
+    "/api/sessions/{session_id}/geometry": {
+      "get": {
+        "description": "Where everything is, all night. Deliberately has no ``as_of``.\n\nIndependent of the cursor, so the client fetches it once when a session\nopens and never again however far the cursor moves. It is NOT immutable:\nadding a target to the night (``api/amend.py``) adds a row. So it is\nrevalidated rather than cached forever -- the content ETag makes an\nunchanged geometry a 304 with no body.",
+        "operationId": "get_geometry_api_sessions__session_id__geometry_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeometryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Geometry",
+        "tags": [
+          "plan"
+        ]
+      }
+    },
     "/api/sessions/{session_id}/grid": {
       "get": {
         "operationId": "get_grid_api_sessions__session_id__grid_get",
@@ -2028,6 +4590,371 @@
         "summary": "Get Plan",
         "tags": [
           "plan"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/refresh": {
+      "post": {
+        "description": "Check a live night for new data now, instead of at the next tick.\n\nThe same check the watch runs every few minutes: one cheap question to\nthe weather source, and a re-plan only if it has something newer. A\nnight that was over when it was created has nothing to check (409);\na check within a minute of the last one is refused (429), because the\nweather service is free and rate-limited.",
+        "operationId": "refresh_session_api_sessions__session_id__refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/satellites": {
+      "get": {
+        "description": "Satellite passes across this night, every ten seconds. Display only.\n\nAnswers 200 with ``available: false`` rather than an error when no\nelements can be had -- offline is the normal case at a dark site. A\nfailure is not cached, so the next request tries again.",
+        "operationId": "get_satellites_api_sessions__session_id__satellites_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SatellitesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Satellites",
+        "tags": [
+          "sky"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/sky": {
+      "get": {
+        "description": "Planets and sky darkness. Display only; no ``as_of``, like ``/geometry``.\n\nDerived from the geometry and nothing else, so it shares the geometry's\ncontent hash as its ETag and is cached as hard.",
+        "operationId": "get_sky_api_sessions__session_id__sky_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Sky",
+        "tags": [
+          "sky"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/targets": {
+      "post": {
+        "description": "Add an object to a planned night, and re-plan.\n\nA night still happening is amended from now; a night that is over,\nfrom ``at`` (the cursor), with every later forecast arrival re-solved\non top. The past is locked either way. See ``api/amend.py``.\n\n200 means it is scheduled. An object the optimiser cannot give time to\nis refused with 409 and the reason, and the night is left exactly as it\nwas -- so a caller never has to undo an add it was told had not\nhappened. 422 is for an object the catalogue will not plan at all.",
+        "operationId": "add_session_target_api_sessions__session_id__targets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTargetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AmendOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Session Target",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/site/locate": {
+      "get": {
+        "description": "What the browser's coordinates are called, and how high they are.\n\nDecoration, not data. The coordinates ARE the site; this only says what\nthe place is named and reads an elevation off a terrain model, so both\nfields are nullable and a lookup that fails answers 200 with nulls\nrather than an error. The form shows the coordinates either way.",
+        "operationId": "locate_site_api_site_locate_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "maximum": 90,
+              "minimum": -90,
+              "title": "Lat",
+              "type": "number"
+            }
+          },
+          {
+            "description": "positive EAST",
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "description": "positive EAST",
+              "maximum": 360,
+              "minimum": -180,
+              "title": "Lon",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Locate Site",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/targets/tonight": {
+      "post": {
+        "description": "The whole catalogue, ranked for one site, night and rig.\n\nTakes no ``as_of`` and needs none: where an object is and how bright it\nis are not published data. The weather is deliberately absent -- this\nanswers \"what is up and worth it\", and the plan answers \"and will it\nbe clear\".",
+        "operationId": "get_tonight_api_targets_tonight_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TonightRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TonightOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Tonight",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/thumbnail": {
+      "get": {
+        "description": "A deep-sky cutout, from disk after the first request.\n\nThe survey is chosen from an allowlist by short key and never taken\nfrom the request, so this cannot be pointed at an arbitrary upstream.\n\nThese are pictures and nothing else: no thumbnail reaches a ledger, a\ngrid or a plan, so the as-of machinery does not apply to this route.",
+        "operationId": "get_thumbnail_api_thumbnail_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ra",
+            "required": true,
+            "schema": {
+              "exclusiveMaximum": 360,
+              "minimum": 0,
+              "title": "Ra",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dec",
+            "required": true,
+            "schema": {
+              "maximum": 90,
+              "minimum": -90,
+              "title": "Dec",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fov",
+            "required": false,
+            "schema": {
+              "default": 0.5,
+              "exclusiveMinimum": 0,
+              "maximum": 10.0,
+              "title": "Fov",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 384,
+              "maximum": 512,
+              "minimum": 16,
+              "title": "Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "survey",
+            "required": false,
+            "schema": {
+              "default": "dss2-color",
+              "title": "Survey",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thumbnail",
+        "tags": [
+          "meta"
         ]
       }
     }

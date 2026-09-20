@@ -1,0 +1,292 @@
+/* The setup sheet's sections. No colour literals -- see base.css. */
+
+/**
+ * The plan page highlights in INK, not in cyan.
+ *
+ * Twenty-six declarations across base.css, components.css, equipment.css and
+ * targets.css reach for `--accent` on this surface: the focus ring on every
+ * field, the pressed state on every chip, the selected row's wash and rail,
+ * the tick that fills when a target goes in, the "differs from the preset"
+ * dot, and the Create Schedule button itself. Painted cyan, a form filled in
+ * correctly lights up like an instrument panel reporting good numbers -- but
+ * none of those marks is a reading. Each one means "you chose this", and the
+ * right colour for a choice is the same colour as the text you chose it with.
+ *
+ * Redefining the token here rather than editing twenty-six rules keeps this
+ * reversible and keeps it LOCAL: `--accent` still carries the slew path, the
+ * target rings and the cursor once the night exists, because the sky really
+ * does need one colour that is not the sky. Nothing outside this sheet moves.
+ */
+.setup {
+  --accent: var(--ink);
+  --accent-deep: var(--ink-dim);
+  --control-on: var(--ink-wash);
+}
+
+/* Create Schedule is an ink slab here, which leaves the shared hover rule
+   (mix 88% accent into ink) resolving to ink mixed with ink -- no change at
+   all. Both states dim toward the panel instead, so the press is still felt.
+   The same button in ObjectInfo keeps the accent it was written for. */
+.setup .primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 88%, var(--panel));
+}
+.setup .primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 74%, var(--panel));
+}
+
+/* Doubled class: components.css is imported after this file (via App) and sets
+   the narrower width at the same specificity. */
+.setup .setup__sheet {
+  width: min(980px, 100%);
+}
+
+/* The title block. Big, quiet, and the only thing at this size on the page. */
+.setup h1 {
+  font-size: 32px;
+  letter-spacing: -0.04em;
+}
+.setup__title {
+  margin-bottom: var(--sp-6);
+}
+
+/**
+ * The night, as four lines.
+ *
+ * Each row is a name, a sentence and a disclosure, on one baseline grid, so
+ * the resting page is read down the middle column rather than scanned across
+ * a field grid. The hairline between rows is the faintest one available:
+ * these are four parts of one answer, not four boxes.
+ */
+.setup__row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--sp-4);
+  padding: var(--sp-4) 0;
+}
+.setup__row + .setup__row {
+  border-top: 1px solid var(--edge-faint);
+}
+
+.setup__row-label {
+  padding-top: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-faint);
+}
+
+.setup__row-main {
+  min-width: 0;
+}
+
+/* The line itself: one step above body, so it reads before the label does. */
+.setup__row-summary {
+  font-size: 15px;
+  line-height: 1.4;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.setup__row-note {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+
+/* A word and a caret, not a button-shaped control: the row is already the
+   decision, and this only says there is more of it. */
+.setup .setup__row-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  transition: color 120ms ease;
+}
+.setup .setup__row-more:hover {
+  color: var(--ink);
+}
+.setup__row-caret {
+  display: inline-block;
+  transition: transform 140ms ease;
+}
+.setup__row--open .setup__row-caret {
+  transform: rotate(90deg);
+}
+
+/* Hidden, never unmounted -- see the Row docstring. Nothing here sets
+   `display`, so the UA's own `[hidden] { display: none }` already carries
+   this unopposed; the rule below is a guard for the day someone gives the
+   drawer a display. It is written with the doubled class deliberately:
+   components.css loads after this file (see the note at the top), so a plain
+   `.setup__drawer` rule there would tie on specificity, win on order, and
+   silently unhide every closed drawer on the page. */
+.setup__drawer {
+  grid-column: 2 / -1;
+  margin-top: var(--sp-4);
+}
+.setup .setup__drawer[hidden] {
+  display: none;
+}
+
+/* A drawer is nearly the sheet's full width, and `auto-fit` with two fields
+   in it would stretch a time picker to 600px. Columns take what a value
+   needs and then stop, so Start and Hours stay the size of a start and an
+   hour. */
+.setup .setup__drawer .setup__grid {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 230px));
+  justify-content: start;
+}
+
+/* A control that IS the line, rather than a field in a grid: as wide as what
+   it holds, set at the line's size, so "Urbana, IL" still reads as a word and
+   not as a filled-in blank. */
+.setup .setup__pick {
+  width: auto;
+  max-width: 100%;
+  padding: 4px 8px;
+  font-size: 15px;
+  letter-spacing: -0.015em;
+}
+
+.setup .setup__link {
+  text-decoration: underline;
+  color: inherit;
+}
+
+/* -- the site line ------------------------------------------------------ */
+
+/* My location, then the list. Wraps on a phone rather than squeezing the
+   preset names into an ellipsis. */
+.setup__site {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* The one control on the resting page that is an ACTION rather than a value,
+   so it is the one thing drawn as a button. Outlined, not filled: Create
+   Schedule is the page's only ink slab and this must not compete with it. */
+.setup .setup__locate {
+  padding: 4px 10px;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-chip, 6px);
+  font-size: 15px;
+  letter-spacing: -0.015em;
+  line-height: 1.4;
+  color: var(--ink);
+  white-space: nowrap;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+.setup .setup__locate:hover:not(:disabled) {
+  border-color: var(--ink-dim);
+}
+.setup .setup__locate:disabled {
+  color: var(--ink-faint);
+}
+
+/* In force. The list beside it says "My location" too, so this only has to
+   agree with it -- it is a state, not a second copy of the answer. */
+.setup .setup__locate--on {
+  border-color: var(--ink-dim);
+  background: var(--ink-wash);
+}
+
+/* Who to credit for a looked-up name and elevation. Spans the drawer's
+   columns so it reads as a footnote to both fields rather than a third one. */
+.setup .setup__credit {
+  grid-column: 1 / -1;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+
+/* -- targets ------------------------------------------------------------ */
+
+/* The only part of the page that differs from last clear night, so it is the
+   only one given a full-strength rule above it. */
+.setup__targets {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-6);
+  border-top: 1px solid var(--edge);
+}
+.setup__targets-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.setup__targets-head h2 {
+  font-size: 15px;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.setup__targets-note {
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+/* More best-case hours selected than the night is dark. */
+.setup .setup__fit--over {
+  color: var(--warn);
+}
+
+/* A value the server would reject, marked as the equipment editor marks one. */
+.setup .field input[aria-invalid="true"] {
+  border-color: var(--crit);
+}
+.setup .setup__err {
+  color: var(--crit);
+}
+
+/* A failed Create. A block, not a chip: it wraps, so a long server message
+   cannot widen the sheet past a phone's width. Textured as .chip--crit is. */
+.setup .setup__error {
+  margin-top: var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-card);
+  border: 1px solid var(--crit);
+  color: var(--crit);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 3px,
+    var(--edge-faint) 3px 4px
+  );
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Create, and what holds it back, said above it. Nothing else lives down
+   here -- the provenance and the weather note that used to sit opposite are
+   gone, so the button is the whole footer. */
+.setup .setup__foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--sp-8);
+}
+.setup .setup__go {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  min-width: 0;
+}
+.setup .setup__why {
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-align: right;
+  color: var(--ink-faint);
+}
+.setup .setup__why--bad {
+  color: var(--warn);
+}

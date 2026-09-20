@@ -7,11 +7,22 @@ from dataclasses import dataclass
 
 ARCSEC_PER_RADIAN = 206264.806247
 
+#: Effective wavelength of Johnson V, the band the whole calculator works in.
+V_BAND_WAVELENGTH_M = 550e-9
+
+#: Airy core FWHM in units of lambda/D, for an UNOBSTRUCTED circular aperture.
+#: A central obstruction narrows the core by a few percent and moves that
+#: light into the rings; neither is modelled, and at amateur obstructions the
+#: net effect on a seeing-broadened star is well under the seeing's own scatter.
+AIRY_FWHM_LAMBDA_OVER_D = 1.029
+
 
 @dataclass(frozen=True, slots=True)
 class Optics:
     aperture_mm: float
     focal_length_mm: float
+    """EFFECTIVE focal length -- after any reducer or Barlow -- because that is
+    what sets the pixel scale and the field."""
     central_obstruction_mm: float = 0.0
     throughput: float = 0.80
     """Total optical transmission. Two aluminised mirrors ~0.81, SCT with
@@ -27,6 +38,40 @@ class Optics:
     @property
     def focal_ratio(self) -> float:
         return self.focal_length_mm / self.aperture_mm
+
+    @property
+    def diffraction_fwhm_arcsec(self) -> float:
+        """Width of the Airy core at 550 nm. Added in quadrature to the seeing.
+
+        Negligible behind an 11-inch SCT (0.4") and not at all negligible behind
+        a 51 mm refractor (2.3"), which is exactly the case where ignoring it
+        would overstate how concentrated a star is.
+        """
+        return (
+            AIRY_FWHM_LAMBDA_OVER_D
+            * V_BAND_WAVELENGTH_M
+            / (self.aperture_mm * 1e-3)
+            * ARCSEC_PER_RADIAN
+        )
+
+    @property
+    def rayleigh_limit_arcsec(self) -> float:
+        """1.22 lambda/D at 550 nm -- the first dark ring of the Airy pattern."""
+        return 1.22 * V_BAND_WAVELENGTH_M / (self.aperture_mm * 1e-3) * ARCSEC_PER_RADIAN
+
+    @property
+    def dawes_limit_arcsec(self) -> float:
+        """Dawes' empirical 116/D -- the separation an observer can just split by eye."""
+        return 116.0 / self.aperture_mm
+
+    def psf_fwhm_arcsec(self, seeing_fwhm_arcsec: float) -> float:
+        """Star size on the sensor: seeing and diffraction in quadrature.
+
+        Quadrature is the standard approximation for convolving two roughly
+        Gaussian profiles; the Airy pattern is not Gaussian, but its core is
+        close enough that the error is a few percent of the smaller term.
+        """
+        return math.hypot(seeing_fwhm_arcsec, self.diffraction_fwhm_arcsec)
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,11 +93,16 @@ class Camera:
     def fov_deg(self, optics: Optics) -> tuple[float, float]:
         """Field of view (width, height) in degrees.
 
-        Uses a proper arctangent rather than the small-angle shortcut, so wide
-        short-focal-length rigs do not quietly report too small a field.
+        Uses a proper arctangent rather than the small-angle shortcut, so a
+        camera lens does not quietly report too large a field (4% at 50 mm).
         """
-        p = self.pixel_scale_arcsec(optics) / 3600.0
-        return (self.sensor_width_px * p, self.sensor_height_px * p)
+        f_mm = optics.focal_length_mm
+
+        def across(n_px: int) -> float:
+            half_mm = n_px * self.pixel_size_um * 1e-3 / 2.0
+            return 2.0 * math.degrees(math.atan(half_mm / f_mm))
+
+        return (across(self.sensor_width_px), across(self.sensor_height_px))
 
 
 @dataclass(frozen=True, slots=True)

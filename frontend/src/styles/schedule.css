@@ -1,0 +1,99 @@
+/* The full-schedule list inside the Right-now card. No colour literals -- see
+   base.css; every value here is a token, so the design pass can take this file
+   over without unpicking anything.
+
+   Two lines per block rather than one. A single row of time, name, exposures
+   and minutes fits 340px only by truncating the name, and "NGC 7000 North
+   Ame…" is the one column that cannot afford it. */
+
+.sched {
+  display: grid;
+  gap: 1px;
+}
+
+.sched__total {
+  margin-bottom: var(--sp-1);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+/* One block. A button, because clicking it seeks there. */
+.sched__row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "time name name"
+    "time subs mins";
+  column-gap: var(--sp-2);
+  row-gap: 1px;
+  /* A pixel more than the 5/6 this had as a bordered box, so losing the
+     border costs no height and the list's rhythm is unchanged. */
+  padding: 6px 7px;
+  border: none;
+  border-radius: var(--r-control);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.sched__row:hover {
+  background: var(--surface-raised);
+}
+
+/* The block the cursor is in. A left inset rule and a fill, NOT an accent
+   hairline: inside a single column where nothing else is boxed, a drawn
+   outline reads as "selected" -- a thing you picked -- and this row is not
+   picked, it is simply where the night has got to. The same idiom marks the
+   active item in the activity log, so "here" looks the same in both lists. */
+.sched__row--now {
+  background: var(--surface-raised);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.sched__time {
+  grid-area: time;
+  align-self: center;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+.sched__row--now .sched__time {
+  color: var(--accent);
+}
+
+.sched__name {
+  grid-area: name;
+  overflow: hidden;
+  font-size: 12px;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.sched__subs {
+  grid-area: subs;
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.sched__min {
+  grid-area: mins;
+  font-size: 10px;
+  text-align: right;
+  color: var(--ink-faint);
+}
+
+/* A block the night has not reached. Shown, because the plan ahead is what
+   the list is for, but not a control: on a live night the cursor cannot go
+   there, and a seek past the live edge means "back to now", which is the
+   opposite of what clicking a future row looks like it will do. */
+.sched__row--ahead {
+  cursor: default;
+}
+.sched__row--ahead:hover {
+  background: none;
+}

@@ -1,0 +1,34 @@
+{
+  "_comment": "Written by scripts/check-sky-alignment.mjs. The projection block is VERIFIED, not assumed -- see that file. Do not hand-edit.",
+  "stars": {
+    "file": "stars.bin",
+    "count": 41411,
+    "stride": 20,
+    "headerBytes": 16,
+    "fields": [
+      "x",
+      "y",
+      "z",
+      "mag",
+      "bv"
+    ],
+    "frame": "icrs",
+    "credit": "Hipparcos, via d3-celestial (BSD-3-Clause). See LICENSES.md."
+  },
+  "background": {
+    "file": "milkyway.webp",
+    "width": 3840,
+    "height": 1920,
+    "projection": "equirectangular",
+    "frame": "icrs",
+    "raAtLeftEdgeDeg": 180,
+    "raIncreasesTo": "left",
+    "decAtTopDeg": 90,
+    "credit": "NASA/GSFC Scientific Visualization Studio; Gaia DR2: ESA/Gaia/DPAC",
+    "verified": {
+      "planePoleSeparationDeg": 1.79,
+      "planeBrightnessRatio": 2.63,
+      "galacticCentreSeparationDeg": 7.69
+    }
+  }
+}

@@ -4,6 +4,76 @@
  */
 
 export interface paths {
+    "/api/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Catalog
+         * @description Every catalogue object with its position, for the sky to draw and
+         *     pick from. Fixed for the life of the process, and cached as such.
+         */
+        get: operations["get_catalog_api_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/notice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Catalog Notice
+         * @description The catalogue's licence notice: the CC BY-SA 4.0 attribution for
+         *     OpenNGC, what this project changed, and the Sharpless acknowledgement.
+         *     Linked from wherever the catalogue is shown.
+         */
+        get: operations["catalog_notice_api_catalog_notice_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/equipment/derive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Derive Equipment
+         * @description A rig's derived figures, for a rig that is not a session yet.
+         *
+         *     Focal ratio, resolving power, star size and sampling are one line of
+         *     arithmetic each, and exactly the kind of number a browser copy would
+         *     round differently from the one the scheduler uses. No caller in the
+         *     frontend is left: the planning form stopped showing these. Kept
+         *     because the arithmetic belongs on this side of the wire whenever
+         *     something asks for it again.
+         */
+        post: operations["derive_equipment_api_equipment_derive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/events": {
         parameters: {
             query?: never;
@@ -36,6 +106,31 @@ export interface paths {
         };
         /** Health */
         get: operations["health_api_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/night-window": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Night Window
+         * @description Astronomical dusk and dawn, so the client asks rather than derives.
+         *
+         *     The night that BEGINS on ``date``, anchored on local solar noon -- at
+         *     longitude -155 that night is mostly the following day in UTC, and
+         *     anchoring on UTC midnight shifts every default by a day for anyone
+         *     west of Greenwich.
+         */
+        get: operations["get_night_window_api_night_window_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -97,6 +192,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/geometry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Geometry
+         * @description Where everything is, all night. Deliberately has no ``as_of``.
+         *
+         *     Independent of the cursor, so the client fetches it once when a session
+         *     opens and never again however far the cursor moves. It is NOT immutable:
+         *     adding a target to the night (``api/amend.py``) adds a row. So it is
+         *     revalidated rather than cached forever -- the content ETag makes an
+         *     unchanged geometry a 304 with no body.
+         */
+        get: operations["get_geometry_api_sessions__session_id__geometry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/grid": {
         parameters: {
             query?: never;
@@ -131,10 +252,257 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Session
+         * @description Check a live night for new data now, instead of at the next tick.
+         *
+         *     The same check the watch runs every few minutes: one cheap question to
+         *     the weather source, and a re-plan only if it has something newer. A
+         *     night that was over when it was created has nothing to check (409);
+         *     a check within a minute of the last one is refused (429), because the
+         *     weather service is free and rate-limited.
+         */
+        post: operations["refresh_session_api_sessions__session_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/satellites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Satellites
+         * @description Satellite passes across this night, every ten seconds. Display only.
+         *
+         *     Answers 200 with ``available: false`` rather than an error when no
+         *     elements can be had -- offline is the normal case at a dark site. A
+         *     failure is not cached, so the next request tries again.
+         */
+        get: operations["get_satellites_api_sessions__session_id__satellites_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/sky": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Sky
+         * @description Planets and sky darkness. Display only; no ``as_of``, like ``/geometry``.
+         *
+         *     Derived from the geometry and nothing else, so it shares the geometry's
+         *     content hash as its ETag and is cached as hard.
+         */
+        get: operations["get_sky_api_sessions__session_id__sky_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Session Target
+         * @description Add an object to a planned night, and re-plan.
+         *
+         *     A night still happening is amended from now; a night that is over,
+         *     from ``at`` (the cursor), with every later forecast arrival re-solved
+         *     on top. The past is locked either way. See ``api/amend.py``.
+         *
+         *     200 means it is scheduled. An object the optimiser cannot give time to
+         *     is refused with 409 and the reason, and the night is left exactly as it
+         *     was -- so a caller never has to undo an add it was told had not
+         *     happened. 422 is for an object the catalogue will not plan at all.
+         */
+        post: operations["add_session_target_api_sessions__session_id__targets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/site/locate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Locate Site
+         * @description What the browser's coordinates are called, and how high they are.
+         *
+         *     Decoration, not data. The coordinates ARE the site; this only says what
+         *     the place is named and reads an elevation off a terrain model, so both
+         *     fields are nullable and a lookup that fails answers 200 with nulls
+         *     rather than an error. The form shows the coordinates either way.
+         */
+        get: operations["locate_site_api_site_locate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/targets/tonight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get Tonight
+         * @description The whole catalogue, ranked for one site, night and rig.
+         *
+         *     Takes no ``as_of`` and needs none: where an object is and how bright it
+         *     is are not published data. The weather is deliberately absent -- this
+         *     answers "what is up and worth it", and the plan answers "and will it
+         *     be clear".
+         */
+        post: operations["get_tonight_api_targets_tonight_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thumbnail
+         * @description A deep-sky cutout, from disk after the first request.
+         *
+         *     The survey is chosen from an allowlist by short key and never taken
+         *     from the request, so this cannot be pointed at an arbitrary upstream.
+         *
+         *     These are pictures and nothing else: no thumbnail reaches a ledger, a
+         *     grid or a plan, so the as-of machinery does not apply to this route.
+         */
+        get: operations["get_thumbnail_api_thumbnail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AddTargetRequest
+         * @description Add one object to a night that is already planned.
+         *
+         *     Usually a name the server can resolve. It may instead carry its OWN
+         *     coordinates, which is the only way to add something the server has never
+         *     heard of -- a star. All 41,411 of them live in the browser, in
+         *     ``public/sky/stars.bin``, keyed by position in that file, and some 36,000
+         *     have no name at all; there is nothing for the server to look up. So the
+         *     client sends what it knows, exactly as ``SessionRequest.targets`` already
+         *     allows for a custom object.
+         */
+        AddTargetRequest: {
+            /**
+             * At
+             * @description a replay re-plans from this instant (the cursor); omitted means dusk. Ignored for a night still happening, which is always amended from now
+             */
+            at?: string | null;
+            /** Decdeg */
+            decDeg?: number | null;
+            /**
+             * Ispointsource
+             * @description true for a star: magnitude is then its total light, and the exposure model prices it as a point source instead of a surface. Getting this wrong is a factor of ~25 in exposure time
+             * @default false
+             */
+            isPointSource: boolean;
+            /**
+             * Magnitude
+             * @description V surface brightness in mag/arcsec^2, or a TOTAL V magnitude when isPointSource is true. All three of raDeg, decDeg and magnitude are needed together
+             */
+            magnitude?: number | null;
+            /**
+             * Name
+             * @description display label; defaults to the id
+             */
+            name?: string | null;
+            /** Radeg */
+            raDeg?: number | null;
+            /**
+             * Target
+             * @description anything that names a catalogue object or a planet: m31, 'NGC 7000', 'Horsehead', 'jupiter'. With raDeg, decDeg and magnitude it is instead this object's id, and nothing is looked up
+             */
+            target: string;
+        };
+        /**
+         * AmendOut
+         * @description What adding the object did.
+         *
+         *     Only ever returned for an object that IS scheduled: adding a target is a
+         *     request, not an order, and one the optimiser cannot place is refused with
+         *     409 and the reason rather than joining the night unscheduled.
+         */
+        AmendOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Decisionindex */
+            decisionIndex: number;
+            /** Message */
+            message: string;
+            /** Sessionid */
+            sessionId: string;
+            /** Targetid */
+            targetId: string;
+            /** Targetname */
+            targetName: string;
+        };
         /** BlockOut */
         BlockOut: {
             /** Airmassmax */
@@ -209,22 +577,112 @@ export interface components {
             /** Warnings */
             warnings: components["schemas"]["WarningOut"][];
         };
-        /** CatalogEntryOut */
-        CatalogEntryOut: {
+        /** CameraPresetOut */
+        CameraPresetOut: {
+            /** Color */
+            color: boolean;
+            /** Darkcurrentepers */
+            darkCurrentEPerS: number;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string;
+            /** Peakqe */
+            peakQe: number;
+            /** Pixelsizeum */
+            pixelSizeUm: number;
+            /** Quantumefficiency */
+            quantumEfficiency: number;
+            /** Readnoisee */
+            readNoiseE: number;
+            /** Readouts */
+            readoutS: number;
+            /** Sensor */
+            sensor: string;
+            /** Sensorheightpx */
+            sensorHeightPx: number;
+            /** Sensorwidthpx */
+            sensorWidthPx: number;
+        };
+        /**
+         * CameraRequest
+         * @description The sensor. Only fields the calculation actually reads are accepted.
+         */
+        CameraRequest: {
+            /**
+             * Darkcurrentepers
+             * @description e-/s/pixel at your set-point
+             */
+            darkCurrentEPerS: number;
+            /** Pixelsizeum */
+            pixelSizeUm: number;
+            /**
+             * Quantumefficiency
+             * @description EFFECTIVE V-band QE; roughly half the mono figure for a colour sensor
+             */
+            quantumEfficiency: number;
+            /**
+             * Readnoisee
+             * @description e- RMS at the gain you image at
+             */
+            readNoiseE: number;
+            /**
+             * Readouts
+             * @description full-frame download time
+             * @default 2
+             */
+            readoutS: number;
+            /** Sensorheightpx */
+            sensorHeightPx: number;
+            /** Sensorwidthpx */
+            sensorWidthPx: number;
+        };
+        /**
+         * CatalogObjectOut
+         * @description One catalogue object, for drawing and picking in the sky.
+         */
+        CatalogObjectOut: {
+            /** Constellation */
+            constellation: string;
             /** Dec */
             dec: string;
             /** Decdeg */
             decDeg: number;
+            /** Designation */
+            designation: string;
             /** Id */
             id: string;
             /** Magnitude */
             magnitude: number;
+            /** Majorarcmin */
+            majorArcmin: number | null;
             /** Name */
             name: string;
+            /** Plannable */
+            plannable: boolean;
             /** Ra */
             ra: string;
             /** Radeg */
             raDeg: number;
+            /** Type */
+            type: string;
+            /** Typelabel */
+            typeLabel: string;
+            /** Vmag */
+            vMag: number | null;
+            /** Whynot */
+            whyNot: string | null;
+        };
+        /** CatalogOut */
+        CatalogOut: {
+            /** Attribution */
+            attribution: string;
+            /** Objects */
+            objects: components["schemas"]["CatalogObjectOut"][];
+            /** Size */
+            size: number;
         };
         /** ChangesOut */
         ChangesOut: {
@@ -258,6 +716,11 @@ export interface components {
             droppedTargets: string[];
             /** Index */
             index: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "start" | "weather" | "amend";
             /** Newestpublished */
             newestPublished: string | null;
             /** Planid */
@@ -278,14 +741,36 @@ export interface components {
             /** Targetid */
             targetId: string;
         };
-        /** EquipmentPresetOut */
-        EquipmentPresetOut: {
+        /**
+         * EquipmentOut
+         * @description A rig, with every number a panel displays about it.
+         *
+         *     Served for the preset rigs, for a session's equipment, and by
+         *     ``POST /api/equipment/derive`` for a rig that is not a session yet -- so
+         *     the focal ratio, resolving power and sampling the Specifications panel
+         *     shows are the server's arithmetic, not a second copy of it in the browser.
+         *
+         *     The planning form no longer shows any of this. It did, as a grid of tiles
+         *     beside the inputs, and they were the densest run of uninterpreted figures
+         *     on the page: nobody re-reads their own Dawes limit before a session.
+         */
+        EquipmentOut: {
             /** Aperturemm */
             apertureMm: number;
+            /** Cameraid */
+            cameraId: string | null;
+            /** Cameraname */
+            cameraName: string | null;
+            /** Centralobstructionmm */
+            centralObstructionMm: number;
             /** Collectingareacm2 */
             collectingAreaCm2: number;
             /** Darkcurrentepers */
             darkCurrentEPerS: number;
+            /** Daweslimitarcsec */
+            dawesLimitArcsec: number;
+            /** Diffractionfwhmarcsec */
+            diffractionFwhmArcsec: number;
             /** Focallengthmm */
             focalLengthMm: number;
             /** Focalratio */
@@ -300,18 +785,75 @@ export interface components {
             minBlockMinutes: number;
             /** Name */
             name: string;
+            /** Nativefocallengthmm */
+            nativeFocalLengthMm: number;
+            /** Obstructionfraction */
+            obstructionFraction: number;
             /** Pixelscalearcsec */
             pixelScaleArcsec: number;
             /** Pixelsizeum */
             pixelSizeUm: number;
+            /** Psffwhmarcsec */
+            psfFwhmArcsec: number;
             /** Quantumefficiency */
             quantumEfficiency: number;
+            /** Rayleighlimitarcsec */
+            rayleighLimitArcsec: number;
             /** Readnoisee */
             readNoiseE: number;
+            /** Readouts */
+            readoutS: number;
+            /** Reducer */
+            reducer: number;
+            /** Referenceseeingarcsec */
+            referenceSeeingArcsec: number;
+            /** Sampling */
+            sampling: string;
+            /** Samplingpxperfwhm */
+            samplingPxPerFwhm: number;
+            /** Sensorheightpx */
+            sensorHeightPx: number;
+            /** Sensorwidthpx */
+            sensorWidthPx: number;
             /** Switchminutes */
             switchMinutes: number;
+            /** Telescopeid */
+            telescopeId: string | null;
+            /** Telescopename */
+            telescopeName: string | null;
             /** Throughput */
             throughput: number;
+        };
+        /**
+         * EquipmentRequest
+         * @description A full rig. Overrides ``equipmentId`` wherever both are sent.
+         */
+        EquipmentRequest: {
+            camera: components["schemas"]["CameraRequest"];
+            /**
+             * Cameraid
+             * @description the camera preset this started from, for display only
+             */
+            cameraId?: string | null;
+            /**
+             * Cameraname
+             * @description display label for the camera when it no longer matches a preset
+             */
+            cameraName?: string | null;
+            mount?: components["schemas"]["MountRequest"];
+            /** Name */
+            name?: string | null;
+            optics: components["schemas"]["OpticsRequest"];
+            /**
+             * Telescopeid
+             * @description the telescope preset this started from, for display only
+             */
+            telescopeId?: string | null;
+            /**
+             * Telescopename
+             * @description display label for the telescope when it no longer matches a preset
+             */
+            telescopeName?: string | null;
         };
         /** EvidenceOut */
         EvidenceOut: {
@@ -326,6 +868,61 @@ export interface components {
             /** Sources */
             sources: string[];
         };
+        /**
+         * GeometryOut
+         * @description Where everything is, all night -- served once and cached forever.
+         *
+         *     Five of the seven arrays the heatmap used to carry never change between
+         *     decision points, because geometry does not depend on the weather. Serving
+         *     them from ``/grid`` meant refetching a quarter-megabyte of identical
+         *     numbers on every scrub past a forecast run. They live here instead, behind
+         *     an ETag, and ``/grid`` carries only what the weather decides.
+         */
+        GeometryOut: {
+            /** Framequat */
+            frameQuat: number[][];
+            /** Geometryid */
+            geometryId: string;
+            /** Lsthours */
+            lstHours: number[];
+            moon: components["schemas"]["MoonOut"];
+            /** Nslots */
+            nSlots: number;
+            /** Rows */
+            rows: components["schemas"]["GeometryRowOut"][];
+            /** Sessionid */
+            sessionId: string;
+            /** Slotmids */
+            slotMids: string[];
+            /** Sunaltitudedeg */
+            sunAltitudeDeg: number[];
+            /** Sunazimuthdeg */
+            sunAzimuthDeg: number[];
+        };
+        /**
+         * GeometryRowOut
+         * @description Per target, as_of-independent. Byte-identical at every decision point.
+         */
+        GeometryRowOut: {
+            /** Airmass */
+            airmass: number[];
+            /** Altitudedeg */
+            altitudeDeg: number[];
+            /** Azimuthdeg */
+            azimuthDeg: number[];
+            /** Decdeg */
+            decDeg: number;
+            /** Moonseparationdeg */
+            moonSeparationDeg: number[];
+            /** Name */
+            name: string;
+            /** Radeg */
+            raDeg: number;
+            /** Targetid */
+            targetId: string;
+            /** Visible */
+            visible: boolean[];
+        };
         /** GridOut */
         GridOut: {
             /**
@@ -335,8 +932,12 @@ export interface components {
             end: string;
             /** Nslots */
             nSlots: number;
+            /** Slotmids */
+            slotMids: string[];
             /** Slotminutes */
             slotMinutes: number;
+            /** Slotseconds */
+            slotSeconds: number;
             /** Slotstarts */
             slotStarts: string[];
             /**
@@ -345,26 +946,29 @@ export interface components {
              */
             start: string;
         };
-        /** GridRowOut */
+        /**
+         * GridRowOut
+         * @description Per target, what the WEATHER decides. Geometry is on ``/geometry``.
+         */
         GridRowOut: {
-            /** Airmass */
-            airmass: number[];
-            /** Altitudedeg */
-            altitudeDeg: number[];
-            /** Azimuthdeg */
-            azimuthDeg: number[];
             /** Efficiency */
             efficiency: number[];
-            /** Moonseparationdeg */
-            moonSeparationDeg: number[];
             /** Name */
             name: string;
             /** Preference */
             preference: number[];
+            /** Preferencefactors */
+            preferenceFactors: {
+                [key: string]: number[];
+            };
+            /** Skycomponentsnl */
+            skyComponentsNl: {
+                [key: string]: number[];
+            };
+            /** Skymagarcsec2 */
+            skyMagArcsec2: number[];
             /** Targetid */
             targetId: string;
-            /** Visible */
-            visible: boolean[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -384,6 +988,59 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * LiveOut
+         * @description How the server keeps a night that is still happening current.
+         *
+         *     Present only for a night that had not ended when the session was created.
+         *     Such a night cannot be folded once: the data that will decide its second
+         *     half has not been published. So the server WATCHES it -- every
+         *     ``every_minutes`` it asks the weather source whether anything new exists,
+         *     and when something does it re-plans at the moment it learned it and
+         *     appends that as a decision point. These fields exist so the observer can
+         *     see the watch working rather than take it on trust.
+         */
+        LiveOut: {
+            /** Checks */
+            checks: number;
+            /** Everyminutes */
+            everyMinutes: number | null;
+            /** Following */
+            following: boolean;
+            /** Lastcheckedat */
+            lastCheckedAt: string | null;
+            /** Lasterror */
+            lastError: string | null;
+            /** Lastresult */
+            lastResult: string;
+            /** Nextcheckat */
+            nextCheckAt: string | null;
+            /** Revision */
+            revision: number;
+            /** Updates */
+            updates: number;
+        };
+        /**
+         * LocationOut
+         * @description A coordinate, decorated. ``GET /api/site/locate``.
+         *
+         *     The two nullable fields are looked up from services that may be down, and
+         *     neither is needed for the site to be planned: the latitude and longitude
+         *     echoed back are the answer, and they are the ones that were asked about.
+         *     A null ``name`` means "we could not find out", never "nowhere".
+         */
+        LocationOut: {
+            /** Attribution */
+            attribution: string;
+            /** Elevationm */
+            elevationM?: number | null;
+            /** Latitudedeg */
+            latitudeDeg: number;
+            /** Longitudedeg */
+            longitudeDeg: number;
+            /** Name */
+            name?: string | null;
+        };
         /** MoonOut */
         MoonOut: {
             /** Altitudedeg */
@@ -400,6 +1057,120 @@ export interface components {
             riseSlot: number | null;
             /** Setslot */
             setSlot: number | null;
+        };
+        /** MountOut */
+        MountOut: {
+            /** Minblockminutes */
+            minBlockMinutes: number;
+            /** Switchminutes */
+            switchMinutes: number;
+        };
+        /** MountRequest */
+        MountRequest: {
+            /**
+             * Minblockminutes
+             * @default 20
+             */
+            minBlockMinutes: number;
+            /**
+             * Switchminutes
+             * @description slew, centre and refocus on a new target
+             * @default 5
+             */
+            switchMinutes: number;
+        };
+        /**
+         * NightWindowOut
+         * @description Twilight boundaries, so the setup form never computes astronomy.
+         */
+        NightWindowOut: {
+            /** Alwaysup */
+            alwaysUp: boolean;
+            /** Darkhours */
+            darkHours: number;
+            /** Date */
+            date: string;
+            /** Dawn */
+            dawn: string | null;
+            /** Dusk */
+            dusk: string | null;
+            /** Neverrises */
+            neverRises: boolean;
+            /** Suggestedhours */
+            suggestedHours: number;
+            /**
+             * Suggestedstart
+             * Format: date-time
+             */
+            suggestedStart: string;
+            /** Sunrise */
+            sunrise: string | null;
+            /** Sunset */
+            sunset: string | null;
+            /** Utcoffsethours */
+            utcOffsetHours: number;
+        };
+        /**
+         * OpticsRequest
+         * @description The telescope, as the exposure calculator sees it.
+         *
+         *     Focal ratio is not a field: it is ``focal_length / aperture`` and accepting
+         *     it as well would allow a request that contradicts itself. The form offers
+         *     it as an input, and turns it into a focal length before it gets here.
+         */
+        OpticsRequest: {
+            /**
+             * Aperturemm
+             * @description clear aperture
+             */
+            apertureMm: number;
+            /**
+             * Centralobstructionmm
+             * @description DIAMETER of the secondary obstruction; 0 for a refractor
+             * @default 0
+             */
+            centralObstructionMm: number;
+            /**
+             * Focallengthmm
+             * @description NATIVE focal length, before any reducer or Barlow
+             */
+            focalLengthMm: number;
+            /**
+             * Reducer
+             * @description focal-length multiplier: 0.63 for a reducer, 2.0 for a Barlow, 1 for none
+             * @default 1
+             */
+            reducer: number;
+            /**
+             * Throughput
+             * @description total optical transmission in V, an estimate
+             * @default 0.8
+             */
+            throughput: number;
+        };
+        /** OutlookNoteOut */
+        OutlookNoteOut: {
+            /** Severity */
+            severity: string;
+            /** Text */
+            text: string;
+        };
+        /** OutlookWindowOut */
+        OutlookWindowOut: {
+            /**
+             * Endsat
+             * Format: date-time
+             */
+            endsAt: string;
+            /** Hours */
+            hours: number;
+            /** Meancloudfraction */
+            meanCloudFraction: number;
+            /**
+             * Startsat
+             * Format: date-time
+             */
+            startsAt: string;
         };
         /** PlanOut */
         PlanOut: {
@@ -424,6 +1195,7 @@ export interface components {
             gap: number;
             /** Objective */
             objective: number;
+            outlook: components["schemas"]["WeatherOutlookOut"];
             /** Planid */
             planId: string;
             /** Progress */
@@ -434,6 +1206,7 @@ export interface components {
             seeingFwhmArcsec: number[];
             /** Sessionid */
             sessionId: string;
+            slotWeather?: components["schemas"]["SlotWeatherOut"];
             /** Slots */
             slots: components["schemas"]["SlotOut"][];
             /** Solvems */
@@ -453,16 +1226,52 @@ export interface components {
              */
             validUntil: string;
         };
+        /** PlanetOut */
+        PlanetOut: {
+            /** Altitudedeg */
+            altitudeDeg: number[];
+            /** Azimuthdeg */
+            azimuthDeg: number[];
+            /** Dec */
+            dec: string;
+            /** Decdeg */
+            decDeg: number;
+            /** Distanceau */
+            distanceAu: number;
+            /** Id */
+            id: string;
+            /** Magnitude */
+            magnitude: number;
+            /** Name */
+            name: string;
+            /** Phaseangledeg */
+            phaseAngleDeg: number;
+            /** Ra */
+            ra: string;
+            /** Radeg */
+            raDeg: number;
+        };
         /** PresetsOut */
         PresetsOut: {
-            /** Catalog */
-            catalog: components["schemas"]["CatalogEntryOut"][];
+            /** Cameras */
+            cameras: components["schemas"]["CameraPresetOut"][];
+            /** Catalogattribution */
+            catalogAttribution: string;
+            /** Catalogsize */
+            catalogSize: number;
+            /** Defaultcameraid */
+            defaultCameraId: string;
+            defaultMount: components["schemas"]["MountOut"];
             /** Defaulttargetids */
             defaultTargetIds: string[];
+            /** Defaulttelescopeid */
+            defaultTelescopeId: string;
             /** Equipment */
-            equipment: components["schemas"]["EquipmentPresetOut"][];
+            equipment: components["schemas"]["EquipmentOut"][];
             /** Sites */
             sites: components["schemas"]["SitePresetOut"][];
+            /** Telescopes */
+            telescopes: components["schemas"]["TelescopePresetOut"][];
         };
         /** QualityGridOut */
         QualityGridOut: {
@@ -483,6 +1292,59 @@ export interface components {
             seeingFwhmArcsec: number[];
             /** Sessionid */
             sessionId: string;
+        };
+        /**
+         * SatellitePassOut
+         * @description One satellite's continuous stretch above the horizon, every ``stepSeconds``.
+         */
+        SatellitePassOut: {
+            /** Altitudedeg */
+            altitudeDeg: number[];
+            /** Azimuthdeg */
+            azimuthDeg: number[];
+            /** Magnitude */
+            magnitude: (number | null)[];
+            /** Name */
+            name: string;
+            /** Noradid */
+            noradId: number;
+            /** Rangekm */
+            rangeKm: number[];
+            /**
+             * Startsat
+             * Format: date-time
+             */
+            startsAt: string;
+            /** Stepseconds */
+            stepSeconds: number;
+        };
+        /**
+         * SatellitesOut
+         * @description Satellites crossing this night's sky. Display only -- see ``/sky``.
+         *
+         *     Elements are the CURRENT CelesTrak set, propagated to the night. That is
+         *     exact for tonight and an increasingly rough estimate for a replay days in
+         *     the past, which is why the provenance travels with the payload.
+         */
+        SatellitesOut: {
+            /** Available */
+            available: boolean;
+            /** Elementspublishedat */
+            elementsPublishedAt: string | null;
+            /** Epochspreaddays */
+            epochSpreadDays: number;
+            /** Nobjects */
+            nObjects: number;
+            /** Passes */
+            passes: components["schemas"]["SatellitePassOut"][];
+            /** Reason */
+            reason?: string | null;
+            /** Sessionid */
+            sessionId: string;
+            /** Source */
+            source: string;
+            /** Stepseconds */
+            stepSeconds: number;
         };
         /** SessionListItemOut */
         SessionListItemOut: {
@@ -518,7 +1380,7 @@ export interface components {
             decisionPoints: components["schemas"]["DecisionPointOut"][];
             /** Distinctplans */
             distinctPlans: number;
-            equipment: components["schemas"]["EquipmentPresetOut"];
+            equipment: components["schemas"]["EquipmentOut"];
             /** Error */
             error?: string | null;
             /** Foldseconds */
@@ -526,6 +1388,7 @@ export interface components {
             grid: components["schemas"]["GridOut"];
             /** Id */
             id: string;
+            live?: components["schemas"]["LiveOut"] | null;
             /** Message */
             message: string;
             moon: components["schemas"]["MoonOut"];
@@ -542,6 +1405,7 @@ export interface components {
             targets: components["schemas"]["TargetOut"][];
             /** Twilight */
             twilight: components["schemas"]["TwilightBandOut"][];
+            weather: components["schemas"]["WeatherSourceOut"];
             /** Weathersource */
             weatherSource: string;
         };
@@ -552,6 +1416,8 @@ export interface components {
              * @description night start date, UTC, YYYY-MM-DD
              */
             date: string;
+            /** @description overrides equipmentId when present */
+            equipment?: components["schemas"]["EquipmentRequest"] | null;
             /**
              * Equipmentid
              * @default sct8-2600mm
@@ -578,7 +1444,8 @@ export interface components {
             slotMinutes: number;
             /**
              * Snrgoal
-             * @default 60
+             * @description per star-sized patch of the target's surface, at its MEAN brightness
+             * @default 15
              */
             snrGoal: number;
             /**
@@ -600,8 +1467,8 @@ export interface components {
             targets?: components["schemas"]["TargetRequest"][] | null;
             /**
              * Weather
-             * @description 'synthetic' (offline, deterministic) or 'open_meteo' (real archived runs)
-             * @default synthetic
+             * @description 'auto' (real data, chosen by when the night is: archived model runs for a past night, the live forecast for tonight or a coming night), 'synthetic' (offline and deterministic -- tests and demos only), or 'open_meteo' (archived runs only)
+             * @default auto
              */
             weather: string;
         };
@@ -621,6 +1488,10 @@ export interface components {
             latitudeDeg: number;
             /** Longitudedeg */
             longitudeDeg: number;
+            /** Minaltitudedeg */
+            minAltitudeDeg: number;
+            /** Minmoonseparationdeg */
+            minMoonSeparationDeg: number;
             /** Name */
             name: string;
             /** Zenithskymagarcsec2 */
@@ -666,6 +1537,25 @@ export interface components {
              */
             name: string;
         };
+        /**
+         * SkyOut
+         * @description The sky around the plan: planets, and how dark it is.
+         *
+         *     Display only -- nothing here reaches a plan -- and weather-independent, so
+         *     like ``/geometry`` it takes no ``as_of`` and is served once per session.
+         */
+        SkyOut: {
+            /** Nslots */
+            nSlots: number;
+            /** Nakedeyelimitmag */
+            nakedEyeLimitMag: number[];
+            /** Planets */
+            planets: components["schemas"]["PlanetOut"][];
+            /** Sessionid */
+            sessionId: string;
+            /** Zenithskymagarcsec2 */
+            zenithSkyMagArcsec2: number[];
+        };
         /** SlotOut */
         SlotOut: {
             /** Kind */
@@ -677,14 +1567,59 @@ export interface components {
             /** Targetid */
             targetId: string | null;
         };
+        /**
+         * SlotWeatherOut
+         * @description The forecast in force at this plan's decision point, one value per slot
+         *     (aligned with ``PlanOut.slots``), for everything the source forecasts
+         *     beyond cloud. ``None`` means the source did not say -- never a guess.
+         *     Cloud totals and seeing are ``PlanOut.cloudFraction`` / ``seeingFwhmArcsec``.
+         */
+        SlotWeatherOut: {
+            /** Basis */
+            basis?: string | null;
+            /** Cloudhigh */
+            cloudHigh?: (number | null)[];
+            /** Cloudlow */
+            cloudLow?: (number | null)[];
+            /** Cloudmid */
+            cloudMid?: (number | null)[];
+            /** Covered */
+            covered?: boolean[];
+            /** Dewpointc */
+            dewPointC?: (number | null)[];
+            /** Humidity */
+            humidity?: (number | null)[];
+            /** Precipitationmm */
+            precipitationMm?: (number | null)[];
+            /**
+             * Seeingforecast
+             * @default false
+             */
+            seeingForecast: boolean;
+            /** Temperaturec */
+            temperatureC?: (number | null)[];
+            /** Windgustms */
+            windGustMs?: (number | null)[];
+            /** Windms */
+            windMs?: (number | null)[];
+        };
         /** TargetOut */
         TargetOut: {
             /** Dec */
             dec: string;
             /** Decdeg */
             decDeg: number;
+            /** Firstusableslot */
+            firstUsableSlot: number | null;
             /** Id */
             id: string;
+            /**
+             * Ispointsource
+             * @default false
+             */
+            isPointSource: boolean;
+            /** Lastusableslot */
+            lastUsableSlot: number | null;
             /** Magnitude */
             magnitude: number;
             /** Maxaltitudedeg */
@@ -699,6 +1634,10 @@ export interface components {
             raDeg: number;
             /** Requiredrefminutes */
             requiredRefMinutes: number;
+            /** Riseslot */
+            riseSlot: number | null;
+            /** Setslot */
+            setSlot: number | null;
             /** Snrgoal */
             snrGoal: number;
             /** Transitslot */
@@ -757,6 +1696,201 @@ export interface components {
              */
             urgency: number;
         };
+        /**
+         * TargetSuggestionOut
+         * @description One catalogue object, and what tonight holds for it.
+         *
+         *     Positions come from the same per-slot horizon rotation the globe is drawn
+         *     with, applied to the whole catalogue at once; they agree with a session's
+         *     astropy geometry to about an arcminute, which is ample for ranking and is
+         *     not what the scheduler plans from -- a chosen target is recomputed exactly
+         *     when the session is built.
+         */
+        TargetSuggestionOut: {
+            /** Bestaltitudedeg */
+            bestAltitudeDeg?: number | null;
+            /** Bestat */
+            bestAt: string | null;
+            /** Caldwell */
+            caldwell: number | null;
+            /** Commonname */
+            commonName: string | null;
+            /** Constellation */
+            constellation: string;
+            /** Dec */
+            dec: string;
+            /** Decdeg */
+            decDeg: number;
+            /** Designation */
+            designation: string;
+            /** Feasible */
+            feasible: boolean;
+            /** Framing */
+            framing: string;
+            /** Framingfill */
+            framingFill: number | null;
+            /** Hourstogoal */
+            hoursToGoal: number | null;
+            /** Id */
+            id: string;
+            /** Magnitude */
+            magnitude: number;
+            /** Magnitudeestimated */
+            magnitudeEstimated: boolean;
+            /** Majorarcmin */
+            majorArcmin: number | null;
+            /** Maxaltitudedeg */
+            maxAltitudeDeg: number;
+            /** Messier */
+            messier: number | null;
+            /** Minorarcmin */
+            minorArcmin: number | null;
+            /** Moonseparationdeg */
+            moonSeparationDeg: number | null;
+            /** Name */
+            name: string;
+            /** Plannable */
+            plannable: boolean;
+            /** Ra */
+            ra: string;
+            /** Radeg */
+            raDeg: number;
+            /** Reasons */
+            reasons: string[];
+            /** Score */
+            score: number;
+            /** Searchtext */
+            searchText: string;
+            /** Transitat */
+            transitAt: string | null;
+            /** Type */
+            type: string;
+            /** Typelabel */
+            typeLabel: string;
+            /** Usablefrom */
+            usableFrom: string | null;
+            /** Usablehours */
+            usableHours: number;
+            /** Usableuntil */
+            usableUntil: string | null;
+            /** Vmag */
+            vMag: number | null;
+            /** Visible */
+            visible: boolean;
+            /** Whynot */
+            whyNot: string | null;
+        };
+        /** TelescopePresetOut */
+        TelescopePresetOut: {
+            /** Aperturemm */
+            apertureMm: number;
+            /** Centralobstructionmm */
+            centralObstructionMm: number;
+            /** Daweslimitarcsec */
+            dawesLimitArcsec: number;
+            /** Design */
+            design: string;
+            /** Focallengthmm */
+            focalLengthMm: number;
+            /** Focalratio */
+            focalRatio: number;
+            /** Id */
+            id: string;
+            /** Manufacturer */
+            manufacturer: string;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string;
+            /** Reducer */
+            reducer: number;
+            /** Throughput */
+            throughput: number;
+        };
+        /** TonightOut */
+        TonightOut: {
+            /** Attribution */
+            attribution: string;
+            /** Catalogsize */
+            catalogSize: number;
+            /** Darkhours */
+            darkHours: number;
+            /** Date */
+            date: string;
+            /** Fovheightdeg */
+            fovHeightDeg: number;
+            /** Fovwidthdeg */
+            fovWidthDeg: number;
+            /** Moonillumination */
+            moonIllumination: number;
+            /** Moonuphours */
+            moonUpHours: number;
+            /** Rankingnote */
+            rankingNote: string;
+            /** Recommendedids */
+            recommendedIds: string[];
+            /** Sitename */
+            siteName: string;
+            /** Targets */
+            targets: components["schemas"]["TargetSuggestionOut"][];
+            /** Visiblecount */
+            visibleCount: number;
+            /**
+             * Windowend
+             * Format: date-time
+             */
+            windowEnd: string;
+            /**
+             * Windowstart
+             * Format: date-time
+             */
+            windowStart: string;
+        };
+        /**
+         * TonightRequest
+         * @description What is worth imaging from a site on a night, with a given rig.
+         */
+        TonightRequest: {
+            /**
+             * Date
+             * @description night start date, YYYY-MM-DD, local to the site
+             */
+            date: string;
+            /** @description overrides equipmentId when present */
+            equipment?: components["schemas"]["EquipmentRequest"] | null;
+            /**
+             * Equipmentid
+             * @default sct8-2600mm
+             */
+            equipmentId: string;
+            /**
+             * Hours
+             * @description window length; omitted means dusk to dawn
+             */
+            hours?: number | null;
+            /** @description overrides siteId when present */
+            site?: components["schemas"]["SiteRequest"] | null;
+            /**
+             * Siteid
+             * @default urbana
+             */
+            siteId: string | null;
+            /**
+             * Snrgoal
+             * @default 15
+             */
+            snrGoal: number;
+            /**
+             * Start
+             * @description window start; omitted means astronomical dusk
+             */
+            start?: string | null;
+            /**
+             * Tsubs
+             * @default 90
+             */
+            tSubS: number;
+        };
         /** TwilightBandOut */
         TwilightBandOut: {
             /**
@@ -793,10 +1927,87 @@ export interface components {
         WarningOut: {
             /** Action */
             action: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "weather" | "moon" | "horizon" | "exposure";
             /** Severity */
             severity: string;
             /** Text */
             text: string;
+        };
+        /**
+         * WeatherOutlookOut
+         * @description A plain-language read of the forecast, as it stood at this plan's as_of.
+         *
+         *     Lives on the PLAN rather than the session so it obeys the same rule as
+         *     everything else: scrub back to dusk and it says what was knowable at dusk.
+         *     Summarises only the dark part of the window, because cloud at 7 p.m. in
+         *     civil twilight is not what anyone setting up a telescope is asking about.
+         */
+        WeatherOutlookOut: {
+            /**
+             * Asof
+             * Format: date-time
+             */
+            asOf: string;
+            /** Basis */
+            basis: string;
+            bestWindow: components["schemas"]["OutlookWindowOut"] | null;
+            /** Category */
+            category: string;
+            /** Clearhours */
+            clearHours: number;
+            /** Darkhours */
+            darkHours: number;
+            /** Dewspreadminc */
+            dewSpreadMinC: number | null;
+            /** Hasdata */
+            hasData: boolean;
+            /** Headline */
+            headline: string;
+            /** Humiditymax */
+            humidityMax: number | null;
+            /** Label */
+            label: string;
+            /** Meancloudfraction */
+            meanCloudFraction: number;
+            /** Notes */
+            notes: components["schemas"]["OutlookNoteOut"][];
+            /** Verdict */
+            verdict: string;
+            /** Verdicttext */
+            verdictText: string;
+            /** Windmaxms */
+            windMaxMs: number | null;
+        };
+        /**
+         * WeatherSourceOut
+         * @description Where this night's weather came from, and how far it can be trusted.
+         *
+         *     Resolved once, when the session is created, from when the night is
+         *     relative to the wall clock -- the one decision in the weather path that
+         *     legitimately needs "now". Every plan built from it still applies the
+         *     publication gate at its own as_of.
+         */
+        WeatherSourceOut: {
+            /** Description */
+            description: string;
+            /** Fetchedat */
+            fetchedAt: string | null;
+            /** Label */
+            label: string;
+            /** Mode */
+            mode: string;
+            /** Model */
+            model: string | null;
+            /** Records */
+            records: number;
+            /** Requested */
+            requested: string;
+            /** Runs */
+            runs: number;
         };
     };
     responses: never;
@@ -807,6 +2018,79 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_catalog_api_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogOut"];
+                };
+            };
+        };
+    };
+    catalog_notice_api_catalog_notice_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+        };
+    };
+    derive_equipment_api_equipment_derive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     events_api_events_get: {
         parameters: {
             query?: never;
@@ -843,6 +2127,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthOut"];
+                };
+            };
+        };
+    };
+    get_night_window_api_night_window_get: {
+        parameters: {
+            query: {
+                /** @description night start date, YYYY-MM-DD, local to the site */
+                date: string;
+                lat: number;
+                /** @description positive EAST */
+                lon: number;
+                elevation_m?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NightWindowOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -980,6 +2300,37 @@ export interface operations {
             };
         };
     };
+    get_geometry_api_sessions__session_id__geometry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeometryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_grid_api_sessions__session_id__grid_get: {
         parameters: {
             query?: {
@@ -1035,6 +2386,233 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PlanOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_session_api_sessions__session_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_satellites_api_sessions__session_id__satellites_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SatellitesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sky_api_sessions__session_id__sky_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_session_target_api_sessions__session_id__targets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddTargetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AmendOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    locate_site_api_site_locate_get: {
+        parameters: {
+            query: {
+                lat: number;
+                /** @description positive EAST */
+                lon: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tonight_api_targets_tonight_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TonightRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TonightOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_thumbnail_api_thumbnail_get: {
+        parameters: {
+            query: {
+                ra: number;
+                dec: number;
+                fov?: number;
+                size?: number;
+                survey?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

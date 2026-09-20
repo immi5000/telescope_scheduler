@@ -1,0 +1,507 @@
+/*
+ * The target picker on the setup sheet. No colour literals -- see base.css.
+ *
+ * Every selector starts at `.tp`. This file is imported by a component, so it
+ * lands in the bundle BEFORE base.css and components.css (main.tsx imports
+ * App first); an unqualified rule here would lose every tie to them.
+ */
+
+.tp {
+  container-type: inline-size;
+  display: grid;
+  gap: var(--sp-2);
+}
+
+/* -- what is in the plan ------------------------------------------------- */
+
+.tp .tp__picked {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px 12px;
+  min-height: 27px;
+}
+
+.tp .tp__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tp .tp__none {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  padding-top: 4px;
+}
+
+.tp .target-toggle.tp-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 12px;
+  font-size: 11.5px;
+  max-width: 220px;
+}
+.tp .tp-pick__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tp .tp-pick__x {
+  color: var(--ink-faint);
+  font-size: 13px;
+  line-height: 1;
+}
+.tp .target-toggle.tp-pick:hover .tp-pick__x {
+  color: var(--ink);
+}
+.tp .target-toggle.tp-pick.tp-pick--warn {
+  border-color: var(--warn);
+  color: var(--warn);
+  border-style: dashed;
+}
+.tp .tp-pick__warn {
+  font-weight: 700;
+}
+
+.tp .tp__actions {
+  display: flex;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding-top: 4px;
+}
+
+.tp .tp-link {
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.tp .tp-link:hover {
+  color: var(--ink);
+}
+
+.tp .tp__lost {
+  font-size: 11px;
+  color: var(--warn);
+}
+.tp .tp__lost-list {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  line-height: 1.45;
+}
+
+/* -- search -------------------------------------------------------------- */
+
+.tp .tp__search {
+  position: relative;
+}
+.tp .tp__search input {
+  padding: 8px 32px 8px 30px;
+  font-size: 13px;
+  border-radius: var(--r-field);
+}
+.tp .tp__search input::placeholder {
+  color: var(--ink-faint);
+}
+.tp .tp__search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-52%);
+  font-size: 15px;
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+.tp .tp__clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-control);
+  border: 1px solid transparent;
+  color: var(--ink-faint);
+  font-size: 15px;
+  line-height: 1;
+}
+.tp .tp__clear:hover {
+  color: var(--ink);
+  border-color: var(--edge-soft);
+}
+
+/* -- the night, in one line ---------------------------------------------- */
+
+.tp .tp__summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.tp .tp__summary b {
+  font-weight: 400;
+  color: var(--ink);
+}
+.tp .tp__status {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.tp .tp__problem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-3);
+  padding: 7px var(--sp-3);
+  border-radius: var(--r-card);
+  border: 1px solid var(--edge-soft);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.tp .tp__problem--crit {
+  border-color: var(--crit);
+  color: var(--crit);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 3px,
+    var(--edge-faint) 3px 4px
+  );
+}
+.tp .tp__problem--warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.tp .tp__problem-aside {
+  color: var(--ink-faint);
+}
+
+/* -- type chips ---------------------------------------------------------- */
+
+.tp .tp__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-height: 25px;
+}
+.tp .target-toggle.tp-filter {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 12px;
+  font-size: 11px;
+}
+.tp .tp-filter__n {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+.tp .target-toggle.tp-filter[aria-pressed="true"] .tp-filter__n {
+  color: var(--accent);
+  opacity: 0.8;
+}
+.tp .tp__hint {
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+/* -- the list ------------------------------------------------------------ */
+
+.tp .tp__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 2px;
+  max-height: 356px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--edge-faint);
+  border-radius: var(--r-card);
+  background: color-mix(in srgb, var(--void-deep) 45%, transparent);
+  transition: opacity 160ms ease;
+  /* The list is taller than its box on every night. Fade the cut rather than
+     slicing a row in half, which reads as a rendering fault. */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+}
+.tp.tp--stale .tp__list,
+.tp.tp--stale .tp__summary-main,
+.tp.tp--stale .tp__detail {
+  opacity: 0.62;
+}
+
+.tp .tp-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 46px 108px 58px 176px;
+  align-items: center;
+  gap: 0 12px;
+  padding: 4px 12px 4px 10px;
+  border-top: 1px solid var(--edge-faint);
+  cursor: pointer;
+  scroll-margin-top: 28px;
+  font-size: 11.5px;
+  line-height: 1.38;
+  color: var(--ink-dim);
+}
+.tp .tp-r {
+  text-align: right;
+}
+
+.tp .tp-row--head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-top: 6px;
+  padding-bottom: 5px;
+  border-top: none;
+  border-bottom: 1px solid var(--edge-faint);
+  background: var(--surface-solid);
+  cursor: default;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.tp .tp-row--head + .tp-row {
+  border-top: none;
+}
+.tp .tp-row--head .tp-row__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-dim);
+}
+
+.tp .tp-row--active {
+  background: var(--surface-raised);
+}
+.tp .tp-row--on {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.tp .tp-row--on.tp-row--active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+/* Not imageable tonight: faint, but still selectable. Adding such a target is
+   a deliberate act now -- the plan reports what is wrong with it -- so only a
+   row nothing can be done with (`--locked`) loses the pointer. */
+.tp .tp-row--off {
+  color: var(--ink-faint);
+}
+.tp .tp-row--locked {
+  cursor: default;
+}
+.tp .tp-row--off.tp-row--on {
+  cursor: pointer;
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--warn);
+}
+
+.tp .tp-row__tick {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--edge-soft);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--ink-faint);
+}
+.tp .tp-row:not(.tp-row--off, .tp-row--on):hover .tp-row__tick,
+.tp .tp-row--active:not(.tp-row--off, .tp-row--on) .tp-row__tick {
+  border-color: var(--accent-deep);
+  color: var(--accent);
+}
+.tp .tp-row.tp-row--on .tp-row__tick {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--void-deep);
+}
+.tp .tp-row--off .tp-row__tick {
+  border-color: transparent;
+}
+.tp .tp-row.tp-row--off.tp-row--on .tp-row__tick {
+  border-color: var(--warn);
+  background: var(--warn);
+  color: var(--void-deep);
+}
+
+.tp .tp-row__id {
+  display: grid;
+  min-width: 0;
+}
+.tp .tp-row__line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.tp .tp-row__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.tp .tp-row--off .tp-row__name {
+  color: var(--ink-dim);
+}
+.tp .tp-row__desig {
+  flex: 0 10 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.tp .tp-row__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+.tp .tp-row__up {
+  color: var(--ink);
+}
+.tp .tp-row__alt,
+.tp .tp-row__up {
+  white-space: nowrap;
+}
+.tp .tp-row__at {
+  color: var(--ink-faint);
+  font-size: 10.5px;
+}
+.tp .tp-row__frame .chip {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+.tp .tp-row__none {
+  color: var(--ink-faint);
+  padding-left: 6px;
+}
+.tp .tp-row__goal {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tp .tp-goal--ok {
+  color: var(--accent);
+}
+.tp .tp-goal--warn {
+  color: var(--warn);
+}
+.tp .tp-goal--none {
+  color: var(--ink-faint);
+}
+.tp .tp-row__why {
+  grid-column: 3 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--ink-faint);
+}
+
+.tp .tp__empty,
+.tp .tp__more {
+  padding: 22px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.tp .tp__more {
+  padding: 8px 12px 6px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  border-top: 1px solid var(--edge-faint);
+}
+.tp .tp__pulse {
+  animation: tp-pulse 1.6s ease-in-out infinite;
+}
+@keyframes tp-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* -- the highlighted row, in full ---------------------------------------- */
+
+.tp .tp__detail {
+  min-height: 34px;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+.tp .tp__detail-name {
+  color: var(--ink);
+  letter-spacing: -0.015em;
+}
+.tp .tp__detail-desig {
+  color: var(--ink-faint);
+}
+
+/*
+ * The catalogue's attribution: one muted link, and the only thing left at the
+ * foot of the picker. See the comment in TargetPicker.tsx for why a link is
+ * enough and why it belongs here rather than on a later screen.
+ */
+.tp .tp__attrib {
+  justify-self: start;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  text-decoration: none;
+}
+.tp .tp__attrib:hover {
+  color: var(--ink-dim);
+}
+.tp .tp__attrib:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* -- narrow sheets: keep the name and the verdict, drop the rest -------- */
+
+@container (max-width: 720px) {
+  .tp .tp-row {
+    grid-template-columns: 18px minmax(0, 1fr) 42px minmax(0, 140px);
+  }
+  .tp .tp-row__alt,
+  .tp .tp-row__frame,
+  .tp .tp-row--head > :nth-child(4),
+  .tp .tp-row--head > :nth-child(5) {
+    display: none;
+  }
+}
+
+/* A phone: four columns leave the name ~30px, so the verdict takes a second
+   line under it. The "Up" column stays fixed, not auto: the nowrap reason
+   spanning it would otherwise size it and squeeze the name out again. */
+@container (max-width: 480px) {
+  .tp .tp-row {
+    grid-template-columns: 18px minmax(0, 1fr) 42px;
+  }
+  .tp .tp-row__goal,
+  .tp .tp-row__why {
+    grid-column: 2 / -1;
+  }
+  .tp .tp-row--head > :nth-child(6) {
+    display: none;
+  }
+}

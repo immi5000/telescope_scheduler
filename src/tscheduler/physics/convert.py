@@ -128,3 +128,16 @@ def add_in_flux(*components_nl: NDArray[np.float64] | float) -> NDArray[np.float
     for c in components_nl:
         total = total + np.asarray(c, dtype=np.float64)
     return total
+
+
+def naked_eye_limit_mag(mu_mag_arcsec2: NDArray[np.float64] | float) -> NDArray[np.float64]:
+    """Faintest star a dark-adapted eye can see against a sky this bright.
+
+    The standard sky-brightness to NELM conversion after Schaefer (1990, PASP
+    102, 212): ``NELM = 7.93 - 5 log10(10^(4.316 - mu/5) + 1)``. A pristine
+    22.0 sky gives 6.6; a suburban 19.5 gives 5.1; civil twilight gives about
+    1. It drives which stars the sky view draws, so the picture thins out
+    under a bright Moon for the same reason the real sky does.
+    """
+    mu = np.asarray(mu_mag_arcsec2, dtype=np.float64)
+    return np.asarray(7.93 - 5.0 * np.log10(10.0 ** (4.316 - mu / 5.0) + 1.0), dtype=np.float64)

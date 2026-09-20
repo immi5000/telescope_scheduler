@@ -1,0 +1,738 @@
+/**
+ * The chrome around the first-person sky: the label layer, the selection
+ * reticle, the top bar, the bottom bar and the object card.
+ *
+ * The sky's OWN drawing -- labels, reticle, the constellation type -- is left
+ * alone; it belongs to the renderer. Everything else here is the card and
+ * control vocabulary from components.css, thinned down so the sky stays the
+ * thing you are looking at: bars that are a hairline and a wash rather than a
+ * surface, and no control that is not an outline.
+ *
+ * The bottom bar rides ABOVE the nightbar, which is itself laid over the foot
+ * of the sky. Both are measured from the bottom of the window, because the
+ * sky now runs the full height of it.
+ */
+
+/* -- the sky itself ------------------------------------------------------ */
+
+.sky-stage {
+  position: absolute;
+  inset: 0;
+  outline: none;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sky-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.sky-stage.stage--pointable {
+  cursor: pointer;
+}
+.sky-stage.stage--grabbing {
+  cursor: grabbing;
+}
+
+/* -- labels -------------------------------------------------------------- */
+
+.label-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
+}
+.sky-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  text-shadow: 0 0 3px var(--void-deep), 0 1px 5px var(--void-deep);
+  transition: opacity 220ms ease;
+  will-change: transform, opacity;
+}
+.sky-label--planet,
+.sky-label--moon,
+.sky-label--sun {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--ink) 92%, var(--accent));
+}
+.sky-label--star {
+  font-size: 12.5px;
+}
+.sky-label--target {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+}
+.sky-label--target-active {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+.sky-label--satellite {
+  font-size: 11px;
+  font-style: italic;
+  color: color-mix(in srgb, var(--accent) 45%, var(--ink));
+}
+.sky-label--constellation {
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--accent) 55%, transparent);
+  text-shadow: none;
+}
+/* The compass, hanging just under the horizon. */
+.sky-label--cardinal {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--crit);
+}
+.sky-label--cardinal::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--crit);
+}
+.sky-label--grid {
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--crit) 75%, var(--ink-dim));
+}
+
+/* A catalogue object: there to be found and added, so present but quiet. */
+.sky-label--catalog {
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--ink-dim) 80%, transparent);
+}
+
+/* Focus on the plan: the context steps back, the plan does not. */
+.sky-stage--focus .sky-label--star,
+.sky-stage--focus .sky-label--constellation,
+.sky-stage--focus .sky-label--satellite,
+.sky-stage--focus .sky-label--catalog {
+  filter: opacity(0.3);
+}
+
+/* -- selection reticle --------------------------------------------------- */
+
+.reticle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 3;
+  will-change: transform, width, height;
+}
+.reticle i {
+  position: absolute;
+  background: var(--ink);
+  border-radius: 2px;
+  box-shadow: 0 0 4px var(--void-deep);
+  animation: reticle-breathe 2s ease-in-out infinite;
+}
+.reticle i:nth-child(1) {
+  left: 50%;
+  top: -9px;
+  width: 3px;
+  height: 8px;
+  margin-left: -1.5px;
+}
+.reticle i:nth-child(2) {
+  top: 50%;
+  right: -9px;
+  width: 8px;
+  height: 3px;
+  margin-top: -1.5px;
+}
+.reticle i:nth-child(3) {
+  left: 50%;
+  bottom: -9px;
+  width: 3px;
+  height: 8px;
+  margin-left: -1.5px;
+}
+.reticle i:nth-child(4) {
+  top: 50%;
+  left: -9px;
+  width: 8px;
+  height: 3px;
+  margin-top: -1.5px;
+}
+@keyframes reticle-breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* -- a one-line status over the sky, bottom left -------------------------- */
+
+.skynote {
+  position: absolute;
+  left: var(--sp-4);
+  bottom: 116px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: none;
+}
+.skynote .chip {
+  background: color-mix(in srgb, var(--void-deep) 70%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* -- top bar -------------------------------------------------------------- */
+
+.topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-3) 0 var(--sp-4);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--void-deep) 78%, transparent),
+    color-mix(in srgb, var(--void-deep) 40%, transparent)
+  );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--edge-faint);
+}
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.topbar__logo {
+  width: 20px;
+  height: 20px;
+  color: var(--ink);
+  flex: 0 0 auto;
+}
+.topbar__title {
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+.topbar__where {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 2px;
+}
+.topbar__right {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+.topbar__fov {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  margin-right: 6px;
+  min-width: 62px;
+  text-align: right;
+}
+.topbar__btn {
+  font-size: 12px;
+  letter-spacing: -0.005em;
+  padding: 5px 14px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-soft);
+  color: var(--ink-dim);
+  white-space: nowrap;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.topbar__btn:hover {
+  color: var(--ink);
+  border-color: var(--edge);
+}
+
+.search {
+  position: relative;
+  width: min(380px, 34vw);
+}
+.search__icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  margin-top: -7.5px;
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+.search input {
+  height: 32px;
+  padding: 0 12px 0 32px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-soft);
+  background: color-mix(in srgb, var(--void-deep) 55%, transparent);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+.search input::placeholder {
+  color: var(--ink-faint);
+}
+.search input:focus {
+  background: color-mix(in srgb, var(--void-deep) 80%, transparent);
+  outline: none;
+  border-color: var(--edge);
+}
+.search__list {
+  position: absolute;
+  top: 38px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: var(--sp-1);
+  list-style: none;
+  background: var(--surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--edge-soft);
+  border-radius: var(--r-card);
+  max-height: 340px;
+  overflow-y: auto;
+}
+.search__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.search__item[aria-selected='true'],
+.search__item:hover {
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+.search__kind {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+.search__empty {
+  padding: var(--sp-2) 10px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+/* Beneath the top bar, not under it. */
+.banner {
+  top: 60px;
+}
+
+/* -- bottom bar ----------------------------------------------------------- */
+
+/* 58px up: the nightbar's own height, so the two stack without a gap. */
+.bottombar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 58px;
+  height: 52px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-3);
+  pointer-events: none;
+}
+.bottombar > * {
+  pointer-events: auto;
+}
+
+/* One wash for both bars, drawn behind them across the foot of the sky. It is
+   its own element rather than a background on either bar, because it has to
+   span both and reach the bottom edge of the window. */
+.bottombar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -24px;
+  bottom: -58px;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--void-deep) 82%, transparent) 0%,
+    color-mix(in srgb, var(--void-deep) 72%, transparent) 55%,
+    transparent 100%
+  );
+}
+.bottombar__place {
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px 14px 5px 11px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-soft);
+  background: color-mix(in srgb, var(--void-deep) 60%, transparent);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.bottombar__place svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+}
+.bottombar__coords {
+  color: var(--ink-faint);
+}
+.bottombar__tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bottombar__sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--sp-1);
+  background: var(--edge-faint);
+}
+.tool {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-soft);
+  background: color-mix(in srgb, var(--void-deep) 45%, transparent);
+  color: var(--ink-dim);
+  font-size: 12px;
+  white-space: nowrap;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.tool svg {
+  width: 16px;
+  height: 16px;
+}
+.tool:hover {
+  color: var(--ink);
+  border-color: var(--edge);
+}
+.tool[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent-deep);
+}
+.tool--icon {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+
+.timebox {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.timebox__rates {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.timebox__play,
+.timebox__rate {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 10px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-soft);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  display: grid;
+  place-items: center;
+  white-space: nowrap;
+}
+.timebox__play {
+  padding: 0;
+}
+.timebox__play svg {
+  width: 12px;
+  height: 12px;
+}
+.timebox__play:hover,
+.timebox__rate:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--edge);
+}
+.timebox__rate[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent-deep);
+}
+.timebox__rate:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.timebox__clock {
+  padding: 3px 14px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-soft);
+  background: color-mix(in srgb, var(--void-deep) 60%, transparent);
+  text-align: center;
+  min-width: 128px;
+  white-space: nowrap;
+}
+.timebox__time {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.timebox__date {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+/* -- the object card ------------------------------------------------------ */
+
+.objinfo {
+  position: absolute;
+  top: 60px;
+  left: var(--sp-3);
+  width: 320px;
+  max-height: calc(100% - 190px);
+  overflow-y: auto;
+  z-index: 4;
+  padding: var(--sp-3);
+  border-radius: var(--r-card);
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--dome) 22%, transparent),
+      transparent 40%
+    ),
+    var(--surface);
+  backdrop-filter: blur(26px) saturate(1.45);
+  -webkit-backdrop-filter: blur(26px) saturate(1.45);
+  border: 1px solid var(--edge-soft);
+  animation: objinfo-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes objinfo-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.objinfo__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.objinfo__icon {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--edge-soft);
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+.objinfo__names {
+  flex: 1;
+  min-width: 0;
+}
+.objinfo__title {
+  font-family: var(--font-sans);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.15;
+  text-transform: none;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+}
+.objinfo__sub {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  margin-top: 4px;
+}
+.objinfo__close {
+  font-size: 16px;
+  line-height: 1;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+}
+.objinfo__close:hover {
+  color: var(--ink);
+  border-color: var(--edge-soft);
+}
+.objinfo__rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.objinfo__row {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: var(--sp-2);
+  font-size: 12px;
+}
+.objinfo__row dt {
+  color: var(--ink-faint);
+}
+.objinfo__row dd {
+  margin: 0;
+  color: var(--ink);
+}
+.objinfo__note {
+  margin: var(--sp-2) 0 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--warn);
+}
+.objinfo__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: var(--sp-3);
+}
+/* The generic action pill. `:not()` so a .primary or a .ghost dropped into
+   this row keeps its own identity -- `.objinfo__actions button` would
+   otherwise outrank both on specificity and quietly un-fill the filled one. */
+.objinfo__actions button:not(.primary):not(.ghost) {
+  padding: 6px 0;
+  border-radius: var(--r-control);
+  border: 1px solid var(--edge-soft);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+}
+.objinfo__actions button {
+  flex: 1;
+  transition: color 120ms ease, border-color 120ms ease, opacity 120ms ease;
+}
+.objinfo__actions button:hover:not(:disabled, .primary, .ghost) {
+  color: var(--ink);
+  border-color: var(--edge);
+}
+.objinfo__actions button[aria-pressed='true']:not(.primary, .ghost) {
+  color: var(--accent);
+  border-color: var(--accent-deep);
+}
+.objinfo__actions button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+@media (max-width: 900px) {
+  .topbar__where,
+  .bottombar__coords,
+  .tool span {
+    display: none;
+  }
+  .objinfo {
+    width: calc(100% - var(--sp-6));
+  }
+  /* The search box's 380px floor is what pushed the brand under it: the middle
+     column has to be allowed to collapse before the outer two do. */
+  .topbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--sp-2);
+    padding: 0 var(--sp-2);
+  }
+  .search {
+    width: auto;
+    min-width: 0;
+  }
+}
+
+/* Below this the sky search has nowhere left to go, and a 60px input is worse
+   than none: the dock's own lists are still searchable. */
+@media (max-width: 620px) {
+  .search {
+    display: none;
+  }
+  .topbar__fov {
+    display: none;
+  }
+  /* The place chip is the first thing to go: where you are is also written
+     across the top bar, and the clock is not written anywhere else. */
+  .bottombar {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    padding: 0 var(--sp-2);
+    gap: var(--sp-2);
+  }
+  .skynote {
+    display: none;
+  }
+  .bottombar__place {
+    display: none;
+  }
+  /* Every tool goes icon-only, so the clock keeps its seconds. The bar is
+     one row of fixed-width controls at this width and it has to add up. */
+  .tool {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+  .bottombar__sep {
+    display: none;
+  }
+  .timebox__clock {
+    min-width: 0;
+    padding: 3px 9px;
+  }
+  .timebox__time {
+    font-size: 12px;
+  }
+  .timebox__date {
+    display: none;
+  }
+}
+
+/* Hidden but still holding its grid column, so the clock stays on the right. */
+.bottombar__tools[hidden] {
+  display: flex;
+  visibility: hidden;
+}

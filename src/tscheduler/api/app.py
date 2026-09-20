@@ -3,11 +3,17 @@
 Shape of the API, and why:
 
 ``GET  /api/presets``                     sites, rigs, catalog -- one POST to a session
+``GET  /api/site/locate?lat=&lon=``       what the browser's coordinates are called
 ``POST /api/sessions``                    create; the fold starts in the background
 ``GET  /api/sessions``                    list
 ``GET  /api/sessions/{id}``               the night: twilight, moon, targets, decision points
+``GET  /api/sessions/{id}/geometry``      where everything is, all night (no as_of)
 ``GET  /api/sessions/{id}/plan?as_of=``   the plan in force at an instant
 ``GET  /api/sessions/{id}/grid?as_of=``   the efficiency/preference heatmap at an instant
+``GET  /api/sessions/{id}/sky``           planets and sky darkness, for the sky view only
+``GET  /api/sessions/{id}/satellites``    satellite passes, for the sky view only
+``POST /api/sessions/{id}/targets``       add an object to a planned night, and re-plan
+``GET  /api/catalog``                     every catalogue object, positioned, for the sky
 ``GET  /api/events``                      SSE notifications (identifiers only, never data)
 ``DELETE /api/sessions/{id}``             drop it
 
@@ -15,22 +21,52 @@ The plan endpoint takes an *instant*, not a plan index, and answers with the
 interval that plan is valid over. That is what turns a slider drag from one
 request per pointer-move into one request per decision point: the client caches
 on ``[validFrom, validUntil)`` and only asks again when the cursor leaves it.
+
+``/geometry`` takes no ``as_of`` **by construction**, and that is the same idea
+one level down. Altitude, azimuth, airmass, lunar separation and visibility do
+not depend on the weather, so they are identical at every decision point;
+serving them from ``/grid`` meant resending a quarter-megabyte of unchanged
+numbers every time a forecast run crossed the cursor. The absence of the
+parameter is the guarantee -- there is no way to ask this endpoint a question
+whose answer could leak, because there is no clock in the question.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import math
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+from importlib import resources
+from pathlib import Path
+from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
+from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES
 
-from tscheduler import __version__
-from tscheduler.api import mappers, presets, schemas
+from tscheduler import __version__, catalog
+from tscheduler.api import (
+    amend,
+    equipment,
+    geolocate,
+    live,
+    mappers,
+    nightwindow,
+    presets,
+    schemas,
+    skyview,
+    thumbnails,
+    tonight,
+)
 from tscheduler.api.session import (
     NightSession,
     SessionStatus,
@@ -45,31 +81,79 @@ from tscheduler.domain.site import Site
 from tscheduler.domain.targets import Target
 from tscheduler.physics.convert import bortle_to_artificial_nl
 from tscheduler.pipeline.builder import SessionSpec
+from tscheduler.providers.satellites.base import SatelliteElementsProvider
+from tscheduler.providers.satellites.celestrak import CelesTrakProvider
 
 UNPROCESSABLE = 422
 """Spelled as a literal: Starlette renamed its constant for this code and
 importing either name pins us to a Starlette version for no benefit."""
 
+WEATHER_SOURCES: tuple[str, ...] = ("auto", "synthetic", "open_meteo")
+"""``auto`` is what the UI sends: real data, chosen by when the night is. The
+other two exist for tests, demos and reproducing a published result."""
+
 HEARTBEAT_SECONDS = 15.0
 """Proxies and load balancers cut an idle stream. A comment frame is the
 cheapest thing that counts as traffic and EventSource ignores it."""
 
+GZIP_EXCLUDED_CONTENT_TYPES: tuple[str, ...] = tuple(
+    dict.fromkeys((*DEFAULT_EXCLUDED_CONTENT_TYPES, "text/event-stream"))
+)
+"""Starlette's defaults, with SSE pinned explicitly.
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+``text/event-stream`` is already in the default tuple, and naming it again
+costs nothing while making the requirement legible: a gzipped event stream
+buffers until the compression window fills, so a live notification arrives
+minutes late instead of immediately -- a failure far too quiet to leave resting
+on someone else's default.
+
+Built by extending the defaults rather than replacing them, because passing
+only the one entry would silently re-enable compression of already-compressed
+PNG, WebP and video responses. ``dict.fromkeys`` dedupes and keeps the order
+stable, so the value does not shuffle between runs.
+"""
+
+
+def create_app(
+    settings: Settings | None = None,
+    *,
+    satellite_elements: SatelliteElementsProvider | None = None,
+) -> FastAPI:
+    """Build the app. ``satellite_elements`` exists so tests can run offline."""
     cfg = settings or load_settings()
     bus = EventBus()
-    store = SessionStore(bus)
+    store = SessionStore(bus, live_every=timedelta(minutes=cfg.live_refresh_minutes))
+    elements = satellite_elements or CelesTrakProvider(cache_dir=Path(cfg.cache_dir) / "tle")
+    # Display-only derived data, one entry per session. Both are pure
+    # functions of the session (plus, for satellites, the elements we hold),
+    # so they are computed on first request and kept for the session's life.
+    sky_cache: dict[str, schemas.SkyOut] = {}
+    satellite_cache: dict[str, schemas.SatellitesOut] = {}
+    satellite_lock = threading.Lock()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         bus.bind(asyncio.get_running_loop())
         yield
+        # Live watches sleep for minutes at a time; left alone they would
+        # outlive the app and wake to a closed loop.
+        await store.close()
 
     app = FastAPI(
         title="Telescope Scheduler",
         version=__version__,
         summary="Real-time visible-light night scheduler with a no-lookahead replay.",
         lifespan=lifespan,
+    )
+    # Order matters: middleware added later sits further out, so CORS must be
+    # added AFTER GZip to stay outermost. A CORS rejection that came back
+    # gzipped without its headers would fail in the browser as an opaque
+    # network error with nothing in the console to explain it.
+    app.add_middleware(
+        GZipMiddleware,
+        minimum_size=1024,
+        compresslevel=6,
+        exclude_content_types=GZIP_EXCLUDED_CONTENT_TYPES,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -78,6 +162,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+        # FastAPI's own 422 echoes the offending input, and Starlette's JSON
+        # parser accepts NaN and Infinity -- which the response encoder then
+        # refuses, turning a validation error into a 500. Same body, finite.
+        return JSONResponse(
+            status_code=UNPROCESSABLE, content={"detail": _finite(jsonable_encoder(exc.errors()))}
+        )
 
     # -- helpers -----------------------------------------------------------
 
@@ -134,9 +227,164 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return schemas.PresetsOut(
             sites=[mappers.site_out(s) for s in presets.SITES],
             equipment=[mappers.equipment_out(e) for e in presets.EQUIPMENT],
-            catalog=mappers.catalog_out(),
+            telescopes=[equipment.telescope_out(t) for t in equipment.TELESCOPES],
+            cameras=[equipment.camera_out(c) for c in equipment.CAMERAS],
+            default_telescope_id=equipment.DEFAULT_TELESCOPE_ID,
+            default_camera_id=equipment.DEFAULT_CAMERA_ID,
+            default_mount=equipment.mount_out(equipment.DEFAULT_MOUNT),
             default_target_ids=list(presets.DEFAULT_TARGET_IDS),
+            catalog_size=presets.catalog_size(),
+            catalog_attribution=presets.CATALOG_ATTRIBUTION,
         )
+
+    @app.post("/api/equipment/derive", response_model=schemas.EquipmentOut, tags=["meta"])
+    def derive_equipment(req: schemas.EquipmentRequest) -> schemas.EquipmentOut:
+        """A rig's derived figures, for a rig that is not a session yet.
+
+        Focal ratio, resolving power, star size and sampling are one line of
+        arithmetic each, and exactly the kind of number a browser copy would
+        round differently from the one the scheduler uses. No caller in the
+        frontend is left: the planning form stopped showing these. Kept
+        because the arithmetic belongs on this side of the wire whenever
+        something asks for it again.
+        """
+        return equipment.equipment_out(equipment.from_request(req))
+
+    thumbs = thumbnails.ThumbnailCache(Path(cfg.cache_dir))
+
+    @app.get("/api/thumbnail", tags=["meta"], response_class=Response)
+    def get_thumbnail(
+        ra: float = Query(ge=0, lt=360),
+        dec: float = Query(ge=-90, le=90),
+        fov: float = Query(default=0.5, gt=0, le=thumbnails.MAX_FOV_DEG),
+        size: int = Query(default=384, ge=16, le=thumbnails.MAX_SIZE_PX),
+        survey: str = Query(default=thumbnails.DEFAULT_SURVEY),
+    ) -> Response:
+        """A deep-sky cutout, from disk after the first request.
+
+        The survey is chosen from an allowlist by short key and never taken
+        from the request, so this cannot be pointed at an arbitrary upstream.
+
+        These are pictures and nothing else: no thumbnail reaches a ledger, a
+        grid or a plan, so the as-of machinery does not apply to this route.
+        """
+        try:
+            req = thumbnails.ThumbnailRequest(
+                ra_deg=ra, dec_deg=dec, fov_deg=fov, size_px=size, survey=survey
+            )
+        except ValueError as exc:
+            raise HTTPException(UNPROCESSABLE, str(exc)) from exc
+
+        try:
+            body = thumbs.fetch(req)
+        except Exception as exc:
+            # A missing picture must never take a panel down with it, so this
+            # is reported plainly and the UI simply draws no thumbnail.
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                f"sky survey cutout unavailable: {type(exc).__name__}: {exc}",
+            ) from exc
+
+        return Response(
+            content=body,
+            media_type="image/jpeg",
+            headers={
+                "ETag": f'W/"{req.key}"',
+                # The sky does not change. This is a 1990s photographic survey.
+                "Cache-Control": "public, max-age=31536000, immutable",
+            },
+        )
+
+    @app.get("/api/night-window", response_model=schemas.NightWindowOut, tags=["meta"])
+    def get_night_window(
+        date: str = Query(description="night start date, YYYY-MM-DD, local to the site"),
+        lat: float = Query(ge=-90, le=90),
+        lon: float = Query(ge=-180, le=360, description="positive EAST"),
+        elevation_m: float = Query(default=0.0),
+    ) -> schemas.NightWindowOut:
+        """Astronomical dusk and dawn, so the client asks rather than derives.
+
+        The night that BEGINS on ``date``, anchored on local solar noon -- at
+        longitude -155 that night is mostly the following day in UTC, and
+        anchoring on UTC midnight shifts every default by a day for anyone
+        west of Greenwich.
+        """
+        try:
+            w = nightwindow.night_window(lat, lon, elevation_m, date)
+        except ValueError as exc:
+            raise HTTPException(UNPROCESSABLE, f"bad date {date!r}: {exc}") from exc
+
+        # Dusk-to-dawn when the sky genuinely gets dark; otherwise sunset to
+        # sunrise, so a high-latitude summer still yields a usable window
+        # instead of a zero-hour one.
+        start = w.dusk or w.sunset
+        if start is None:
+            start = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=UTC) + timedelta(
+                hours=12 - w.utc_offset_hours + 12
+            )
+        return schemas.NightWindowOut(
+            date=date,
+            sunset=w.sunset,
+            dusk=w.dusk,
+            dawn=w.dawn,
+            sunrise=w.sunrise,
+            dark_hours=w.dark_hours,
+            utc_offset_hours=w.utc_offset_hours,
+            always_up=w.always_up,
+            never_rises=w.never_rises,
+            suggested_start=start,
+            suggested_hours=round(max(0.5, min(w.dark_hours or 8.0, 16.0)), 2),
+        )
+
+    @app.get("/api/site/locate", response_model=schemas.LocationOut, tags=["meta"])
+    def locate_site(
+        lat: float = Query(ge=-90, le=90),
+        lon: float = Query(ge=-180, le=360, description="positive EAST"),
+    ) -> schemas.LocationOut:
+        """What the browser's coordinates are called, and how high they are.
+
+        Decoration, not data. The coordinates ARE the site; this only says what
+        the place is named and reads an elevation off a terrain model, so both
+        fields are nullable and a lookup that fails answers 200 with nulls
+        rather than an error. The form shows the coordinates either way.
+        """
+        lon = ((lon + 180.0) % 360.0) - 180.0
+        place = geolocate.locate(lat, lon)
+        return schemas.LocationOut(
+            latitude_deg=lat,
+            longitude_deg=lon,
+            name=place.name,
+            elevation_m=place.elevation_m,
+            attribution=geolocate.ATTRIBUTION,
+        )
+
+    @app.get("/api/catalog/notice", tags=["meta"], response_class=PlainTextResponse)
+    def catalog_notice() -> str:
+        """The catalogue's licence notice: the CC BY-SA 4.0 attribution for
+        OpenNGC, what this project changed, and the Sharpless acknowledgement.
+        Linked from wherever the catalogue is shown."""
+        return (resources.files("tscheduler.catalog") / "NOTICE").read_text(encoding="utf-8")
+
+    @app.post("/api/targets/tonight", response_model=schemas.TonightOut, tags=["meta"])
+    def get_tonight(req: schemas.TonightRequest) -> schemas.TonightOut:
+        """The whole catalogue, ranked for one site, night and rig.
+
+        Takes no ``as_of`` and needs none: where an object is and how bright it
+        is are not published data. The weather is deliberately absent -- this
+        answers "what is up and worth it", and the plan answers "and will it
+        be clear".
+        """
+        site_preset, site = _resolve_site(req)
+        try:
+            rig = equipment.resolve(req.equipment_id, req.equipment)
+        except LookupError as exc:
+            raise HTTPException(UNPROCESSABLE, str(exc)) from exc
+        try:
+            return tonight.tonight_out(req, site_preset, site, rig)
+        except ValueError as exc:
+            raise HTTPException(UNPROCESSABLE, str(exc)) from exc
+        except NotImplementedError as exc:
+            raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, str(exc)) from exc
 
     @app.post(
         "/api/sessions",
@@ -166,6 +414,136 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def delete_session(session_id: str) -> None:
         if not store.delete(session_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"no session {session_id!r}")
+        sky_cache.pop(session_id, None)
+        satellite_cache.pop(session_id, None)
+
+    @app.post(
+        "/api/sessions/{session_id}/refresh",
+        response_model=schemas.SessionOut,
+        tags=["sessions"],
+    )
+    async def refresh_session(session_id: str) -> schemas.SessionOut:
+        """Check a live night for new data now, instead of at the next tick.
+
+        The same check the watch runs every few minutes: one cheap question to
+        the weather source, and a re-plan only if it has something newer. A
+        night that was over when it was created has nothing to check (409);
+        a check within a minute of the last one is refused (429), because the
+        weather service is free and rate-limited.
+        """
+        sess = require(session_id)
+        if sess.live is None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "this night was over when the session was created; it is a replay "
+                "and has nothing new to check",
+            )
+        outcome = await store.check(sess, manual=True)
+        if outcome is live.CheckOutcome.TOO_SOON:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "checked less than a minute ago; try again shortly",
+            )
+        return mappers.session_out(sess)
+
+    @app.post(
+        "/api/sessions/{session_id}/targets",
+        response_model=schemas.AmendOut,
+        tags=["sessions"],
+    )
+    async def add_session_target(
+        session_id: str, req: schemas.AddTargetRequest
+    ) -> schemas.AmendOut:
+        """Add an object to a planned night, and re-plan.
+
+        A night still happening is amended from now; a night that is over,
+        from ``at`` (the cursor), with every later forecast arrival re-solved
+        on top. The past is locked either way. See ``api/amend.py``.
+
+        200 means it is scheduled. An object the optimiser cannot give time to
+        is refused with 409 and the reason, and the night is left exactly as it
+        was -- so a caller never has to undo an add it was told had not
+        happened. 422 is for an object the catalogue will not plan at all.
+        """
+        sess = require_ready(session_id)
+        given = (req.ra_deg, req.dec_deg, req.magnitude)
+        if any(v is not None for v in given):
+            # Own coordinates win over every lookup: they are how something the
+            # server has never heard of is added at all -- a star, which exists
+            # only in the browser's own catalogue (see AddTargetRequest).
+            # Partial coordinates are a client bug, not a reason to fall back to
+            # a name search that would resolve to something else entirely.
+            if any(v is None for v in given):
+                raise HTTPException(
+                    UNPROCESSABLE, "raDeg, decDeg and magnitude must be given together"
+                )
+            ra, dec, mag = given
+            target: Target | None = Target(
+                id=req.target,
+                name=req.name or req.target,
+                ra_deg=float(ra),  # type: ignore[arg-type]
+                dec_deg=float(dec),  # type: ignore[arg-type]
+                magnitude=float(mag),  # type: ignore[arg-type]
+                is_point_source=req.is_point_source,
+            )
+        else:
+            known = next((t for t in sess.spec.targets if t.id == req.target), None)
+            # Planets BEFORE the catalogue, and the order is not arbitrary:
+            # `catalog.resolve("saturn")` finds the Saturn Nebula, so looking the
+            # catalogue up first swaps the planet for a planetary nebula without
+            # saying so. Exact body names only, which leaves "saturn nebula" and
+            # "ngc7009" resolving where they should.
+            target = (
+                known
+                or presets.planet_target(sess.spec.site, sess.spec.grid, req.target)
+                or presets.catalog_target(req.target)
+            )
+        # Hoisted out of the else: narrowing inside it leaves `Target | None`
+        # on the path that took the coordinate branch, which mypy is right to
+        # reject even though that branch cannot produce None.
+        if target is None:
+            why = catalog.refusal(req.target) or f"{req.target!r} is not in the catalogue"
+            raise HTTPException(UNPROCESSABLE, why)
+        # A naive instant is UTC, as everywhere else in this API.
+        at = None
+        if req.at is not None:
+            at = req.at.replace(tzinfo=UTC) if req.at.tzinfo is None else req.at.astimezone(UTC)
+        loop = asyncio.get_running_loop()
+        try:
+            result = await loop.run_in_executor(None, lambda: amend.add_target(sess, target, at=at))
+        except amend.AmendError as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+        dp = result.decision
+        bus.publish(
+            {
+                "type": "plan.available",
+                "sessionId": sess.id,
+                "decisionIndex": dp.index,
+                "at": dp.at.isoformat(),
+                "planId": dp.plan_id,
+            }
+        )
+        return schemas.AmendOut(
+            session_id=sess.id,
+            target_id=result.target.id,
+            target_name=result.target.name,
+            at=dp.at,
+            decision_index=dp.index,
+            message=result.message,
+        )
+
+    catalog_cache: list[schemas.CatalogOut] = []
+
+    @app.get("/api/catalog", response_model=schemas.CatalogOut, tags=["meta"])
+    def get_catalog() -> Response:
+        """Every catalogue object with its position, for the sky to draw and
+        pick from. Fixed for the life of the process, and cached as such."""
+        if not catalog_cache:
+            catalog_cache.append(mappers.catalog_out())
+        return JSONResponse(
+            content=catalog_cache[0].model_dump(mode="json", by_alias=True),
+            headers={"Cache-Control": "private, max-age=3600"},
+        )
 
     @app.get("/api/sessions/{session_id}/plan", response_model=schemas.PlanOut, tags=["plan"])
     def get_plan(
@@ -177,6 +555,92 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> schemas.PlanOut:
         sess = require_ready(session_id)
         return mappers.plan_out(sess, resolve_index(sess, as_of))
+
+    @app.get(
+        "/api/sessions/{session_id}/geometry",
+        response_model=schemas.GeometryOut,
+        tags=["plan"],
+    )
+    def get_geometry(session_id: str, request: Request) -> Response:
+        """Where everything is, all night. Deliberately has no ``as_of``.
+
+        Independent of the cursor, so the client fetches it once when a session
+        opens and never again however far the cursor moves. It is NOT immutable:
+        adding a target to the night (``api/amend.py``) adds a row. So it is
+        revalidated rather than cached forever -- the content ETag makes an
+        unchanged geometry a 304 with no body.
+        """
+        sess = require(session_id)
+        if sess.geometry is None:
+            raise HTTPException(
+                status.HTTP_425_TOO_EARLY,
+                f"geometry is still being computed ({sess.progress:.0%}: {sess.message})",
+            )
+        etag = f'W/"{mappers.geometry_id(sess.geometry)}"'
+        # Weak comparison, and a list: a conforming client may send several,
+        # and a proxy is entitled to add its own.
+        if etag in {v.strip() for v in request.headers.get("if-none-match", "").split(",")}:
+            return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        body = mappers.geometry_out(sess)
+        return JSONResponse(
+            content=body.model_dump(mode="json", by_alias=True),
+            headers={
+                "ETag": etag,
+                # Private, not public: a session id is a capability here.
+                "Cache-Control": "private, no-cache",
+            },
+        )
+
+    @app.get("/api/sessions/{session_id}/sky", response_model=schemas.SkyOut, tags=["sky"])
+    def get_sky(session_id: str, request: Request) -> Response:
+        """Planets and sky darkness. Display only; no ``as_of``, like ``/geometry``.
+
+        Derived from the geometry and nothing else, so it shares the geometry's
+        content hash as its ETag and is cached as hard.
+        """
+        sess = require(session_id)
+        if sess.geometry is None:
+            raise HTTPException(
+                status.HTTP_425_TOO_EARLY,
+                f"geometry is still being computed ({sess.progress:.0%}: {sess.message})",
+            )
+        etag = f'W/"sky-{mappers.geometry_id(sess.geometry)}"'
+        if etag in {v.strip() for v in request.headers.get("if-none-match", "").split(",")}:
+            return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        body = sky_cache.get(sess.id)
+        if body is None:
+            body = sky_cache[sess.id] = skyview.sky_out(sess)
+        return JSONResponse(
+            content=body.model_dump(mode="json", by_alias=True),
+            headers={"ETag": etag, "Cache-Control": "private, max-age=31536000, immutable"},
+        )
+
+    @app.get(
+        "/api/sessions/{session_id}/satellites",
+        response_model=schemas.SatellitesOut,
+        tags=["sky"],
+    )
+    def get_satellites(session_id: str) -> schemas.SatellitesOut:
+        """Satellite passes across this night, every ten seconds. Display only.
+
+        Answers 200 with ``available: false`` rather than an error when no
+        elements can be had -- offline is the normal case at a dark site. A
+        failure is not cached, so the next request tries again.
+        """
+        sess = require(session_id)
+        cached = satellite_cache.get(sess.id)
+        if cached is not None:
+            return cached
+        # One propagation at a time: a second request for the same session
+        # waits for the first and then reads its result.
+        with satellite_lock:
+            cached = satellite_cache.get(sess.id)
+            if cached is not None:
+                return cached
+            out = skyview.satellites_out(sess, elements)
+            if out.available:
+                satellite_cache[sess.id] = out
+            return out
 
     @app.get(
         "/api/sessions/{session_id}/grid", response_model=schemas.QualityGridOut, tags=["plan"]
@@ -222,21 +686,19 @@ def _build_session(req: schemas.SessionRequest, cfg: Settings) -> NightSession:
     start, end = _window(req)
     grid = TimeGrid.from_window(start, end, req.slot_minutes)
 
-    eq = presets.equipment_by_id(req.equipment_id)
-    if eq is None:
-        raise HTTPException(
-            UNPROCESSABLE,
-            f"unknown equipmentId {req.equipment_id!r}; try {[e.id for e in presets.EQUIPMENT]}",
-        )
+    try:
+        eq = equipment.resolve(req.equipment_id, req.equipment)
+    except LookupError as exc:
+        raise HTTPException(UNPROCESSABLE, str(exc)) from exc
 
     site_preset, site = _resolve_site(req)
     targets = _resolve_targets(req)
     if not targets:
         raise HTTPException(UNPROCESSABLE, "no targets resolved")
-    if req.weather not in ("synthetic", "open_meteo"):
+    if req.weather not in WEATHER_SOURCES:
         raise HTTPException(
             UNPROCESSABLE,
-            f"weather must be 'synthetic' or 'open_meteo', got {req.weather!r}",
+            f"weather must be one of {list(WEATHER_SOURCES)}, got {req.weather!r}",
         )
 
     spec = SessionSpec(
@@ -249,17 +711,22 @@ def _build_session(req: schemas.SessionRequest, cfg: Settings) -> NightSession:
         snr_goal=req.snr_goal,
         t_sub_s=req.t_sub_s,
     )
+    # AsOf.live() rather than datetime.now(): core/clock.py is the one
+    # sanctioned wall-clock reader in the package, and the AST guardrail
+    # enforces it here too. The same instant resolves weather "auto" (a night
+    # already over is replayed from archived runs; tonight or a coming night
+    # gets the live forecast, stamped with this instant), so the session's
+    # creation time and its weather's "now" can never disagree.
+    now = AsOf.live()
     return NightSession(
         id=new_session_id(),
-        name=req.name or f"{site.name} {req.date}",
-        # AsOf.live() rather than datetime.now(): core/clock.py is the one
-        # sanctioned wall-clock reader in the package, and the AST guardrail
-        # enforces it here too.
-        created_at=AsOf.live().t,
+        name=req.name or f"{site.name} · night of {_night_of(grid.start, site.longitude_deg)}",
+        created_at=now.t,
         spec=spec,
         site_preset=site_preset,
         equipment_preset=eq,
         weather_source=req.weather,
+        now=now,
         solve_seconds=min(req.solve_seconds, cfg.solve_seconds * 4),
     )
 
@@ -271,7 +738,9 @@ def _window(req: schemas.SessionRequest) -> tuple[datetime, datetime]:
         raise HTTPException(UNPROCESSABLE, f"bad date {req.date!r}: {exc}") from exc
 
 
-def _resolve_site(req: schemas.SessionRequest) -> tuple[presets.SitePreset, Site]:
+def _resolve_site(
+    req: schemas.SessionRequest | schemas.TonightRequest,
+) -> tuple[presets.SitePreset, Site]:
     if req.site is not None:
         r = req.site
         preset = presets.SitePreset(
@@ -282,6 +751,8 @@ def _resolve_site(req: schemas.SessionRequest) -> tuple[presets.SitePreset, Site
             elevation_m=r.elevation_m,
             bortle=r.bortle,
             extinction_k=r.extinction_k,
+            min_altitude_deg=r.min_altitude_deg,
+            min_moon_separation_deg=r.min_moon_separation_deg,
         )
         site = Site(
             latitude_deg=r.latitude_deg,
@@ -310,8 +781,10 @@ def _resolve_targets(req: schemas.SessionRequest) -> tuple[Target, ...]:
         return tuple(t for t in resolved if t is not None)
 
     out: list[Target] = []
+    custom: set[str] = set()
     for r in req.targets:
         if r.ra_deg is not None and r.dec_deg is not None and r.magnitude is not None:
+            custom.add(r.id)
             out.append(
                 Target(
                     id=r.id,
@@ -327,12 +800,53 @@ def _resolve_targets(req: schemas.SessionRequest) -> tuple[Target, ...]:
             continue
         found = presets.catalog_target(r.id, priority=r.priority, snr_goal=r.snr_goal)
         if found is None:
+            why = catalog.refusal(r.id) or f"{r.id!r} is not in the catalogue"
             raise HTTPException(
-                UNPROCESSABLE,
-                f"target {r.id!r} is not in the catalog; supply raDeg, decDeg and magnitude",
+                UNPROCESSABLE, f"{why}; or supply raDeg, decDeg and magnitude to plan it anyway"
             )
         out.append(found)
-    return tuple(out)
+    # Catalogue ids arrive in any spelling ("n7000", "NGC 7000") and leave
+    # canonical, so two spellings of one object collapse into one target, which
+    # keeps the most demanding of what was asked. A CUSTOM target is the
+    # caller's own object: one that shares an id with anything else is an
+    # ambiguity to report, not a duplicate to drop.
+    merged: dict[str, Target] = {}
+    for t in out:
+        prev = merged.get(t.id)
+        if prev is None:
+            merged[t.id] = t
+            continue
+        if t.id in custom:
+            raise HTTPException(
+                UNPROCESSABLE,
+                f"two targets have the id {t.id!r}; give the custom target a unique id",
+            )
+        goals = [g for g in (prev.snr_goal, t.snr_goal) if g is not None]
+        merged[t.id] = replace(
+            prev,
+            priority=max(prev.priority, t.priority),
+            snr_goal=max(goals) if goals else None,
+        )
+    return tuple(merged.values())
+
+
+def _night_of(start: datetime, longitude_deg: float) -> str:
+    """The local date a night is called by: the date of the local solar noon
+    before it began. ``req.date`` is a UTC date, and at an American site the
+    night of the 17th starts on the 18th in UTC."""
+    return (start + timedelta(hours=longitude_deg / 15.0 - 12.0)).date().isoformat()
+
+
+def _finite(obj: Any) -> Any:
+    """``obj`` with every NaN or infinity replaced by its string, so it can be
+    sent as JSON."""
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {k: _finite(v) for k, v in obj.items()}
+    if isinstance(obj, list | tuple):
+        return [_finite(v) for v in obj]
+    return obj
 
 
 app = create_app()

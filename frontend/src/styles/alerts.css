@@ -1,0 +1,272 @@
+/**
+ * Alerts. No colour literals -- see base.css.
+ *
+ * Every alert sets `--cat` to its category's colour (see alerts/model.ts), and
+ * everything below derives from that one variable. Hue therefore always means
+ * KIND. Severity is carried by weight and texture instead: a warn gets a
+ * labelled pill, a critical gets the striped rose texture and stays until
+ * dismissed. That keeps "weather" and "critical" from ever fighting over the
+ * same channel.
+ *
+ * These are the one place the card vocabulary is allowed to raise its voice: a
+ * toast carries its category's hairline and a 3px stripe, and rings once on
+ * arrival. It still casts no shadow -- the ring is motion, which the eye
+ * catches in peripheral vision far better than a blur ever did.
+ */
+
+.alert-icon {
+  flex: 0 0 auto;
+  display: block;
+}
+
+.cat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px 2px 7px;
+  border-radius: var(--r-control);
+  border: 1px solid color-mix(in srgb, var(--cat) 45%, transparent);
+  color: var(--cat);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.sev {
+  padding: 2px 8px;
+  border-radius: var(--r-control);
+  border: 1px solid currentColor;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  font-weight: 400;
+}
+.sev--warn {
+  color: var(--warn);
+}
+/* Filled rather than striped: at this size a texture behind the word only
+   makes the word harder to read. The stripes live on the row and toast. */
+.sev--critical {
+  color: var(--ink);
+  border-color: var(--crit);
+  background: color-mix(in srgb, var(--crit) 45%, transparent);
+}
+
+/* -- rows (the Now card) -------------------------------------------------- */
+
+.alerts {
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.alert-row {
+  border-radius: var(--r-card);
+  border: 1px solid color-mix(in srgb, var(--cat) 28%, transparent);
+  box-shadow: inset 3px 0 0 var(--cat);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.alert-row__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px 6px 11px;
+  list-style: none;
+}
+summary.alert-row__head {
+  cursor: pointer;
+}
+.alert-row__head::-webkit-details-marker {
+  display: none;
+}
+
+.alert-row__cat {
+  flex: 0 0 auto;
+  color: var(--cat);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+}
+
+.alert-row__text {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+}
+
+.alert-row__caret {
+  color: var(--ink-faint);
+  transition: transform 140ms ease;
+}
+.alert-row[open] .alert-row__caret {
+  transform: rotate(90deg);
+}
+
+.alert-row__detail {
+  padding: 0 10px 8px 33px;
+  color: var(--ink-dim);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.alert-row--info {
+  border-color: var(--edge-faint);
+}
+.alert-row--info .alert-row__text {
+  color: var(--ink-dim);
+}
+
+.alert-row--critical {
+  border-color: var(--crit);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 4px,
+    color-mix(in srgb, var(--crit) 14%, transparent) 4px 5px
+  );
+}
+
+/* -- toasts --------------------------------------------------------------- */
+
+/* Top-centre, under the top bar: where the eye already is, and clear of both
+   the dock on the right and the object card on the left. */
+.toasts {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(360px, calc(100vw - 24px));
+  display: flex;
+  /* Newest on top, nearest the eye. */
+  flex-direction: column-reverse;
+  gap: var(--sp-2);
+  z-index: 50;
+  pointer-events: none;
+}
+
+.toast {
+  --cat: var(--accent);
+  position: relative;
+  pointer-events: auto;
+  padding: 10px 12px 12px 16px;
+  border-radius: var(--r-card);
+  border: 1px solid color-mix(in srgb, var(--cat) 45%, transparent);
+  background: var(--surface);
+  backdrop-filter: blur(22px) saturate(1.25);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+  overflow: hidden;
+  animation:
+    toast-in 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    toast-flash 1.3s ease-out;
+}
+
+/* The category stripe: readable from across the room. */
+.toast::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--cat);
+}
+
+.toast--critical {
+  border-color: var(--crit);
+  animation:
+    toast-in 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    toast-pulse 2.2s ease-in-out 0.4s infinite;
+}
+
+/* On the way out. Placed AFTER `.toast--critical` on purpose: both are single
+   classes, so this wins on source order alone, and it must win as the
+   shorthand -- replacing the whole `animation` property rather than adding to
+   it. That stops the critical toast's infinite ring mid-fade, which is what
+   you want: a toast that is leaving should not still be calling for
+   attention. (The ring animates box-shadow, not opacity, so it would not have
+   fought the fade numerically -- it would just have looked deranged.)
+
+   `forwards` is load-bearing. The element is unmounted on a timer rather than
+   on animationend, so without it the toast would fade out and then snap back
+   to full opacity for the remainder of the wait.
+
+   Not clickable on the way out: 350ms is long enough to land a click on an
+   action button belonging to a toast that has already been dismissed. */
+.toast--leaving {
+  pointer-events: none;
+  animation: toast-out 350ms ease forwards;
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+.toast__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toast__when {
+  margin-left: auto;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+}
+
+.toast__title {
+  margin-top: var(--sp-2);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+
+.toast__body {
+  margin-top: 3px;
+  color: var(--ink-dim);
+  font-size: 12px;
+  line-height: 1.45;
+  /* Sentences now, not a dotted shorthand list, and the card is a fixed
+     360px with `overflow: hidden`. A catalogue designation long enough to
+     beat that would be clipped, not wrapped, without this. */
+  overflow-wrap: anywhere;
+}
+
+.toast__action {
+  margin-top: var(--sp-2);
+  padding: 4px 14px;
+  border-radius: var(--r-control);
+  border: 1px solid color-mix(in srgb, var(--cat) 55%, transparent);
+  color: var(--ink);
+  font-size: 12px;
+}
+.toast__action:hover {
+  border-color: var(--cat);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+}
+
+/* One ring on arrival, so a new alert is noticed in peripheral vision. */
+@keyframes toast-flash {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--cat) 70%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--cat) 0%, transparent);
+  }
+}
+
+@keyframes toast-pulse {
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--crit) 22%, transparent);
+  }
+}
