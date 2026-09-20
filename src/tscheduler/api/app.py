@@ -142,7 +142,7 @@ def create_app(
         await store.close()
 
     app = FastAPI(
-        title="Telescope Scheduler",
+        title="Traveling Telescope",
         version=__version__,
         summary="Real-time visible-light night scheduler with a no-lookahead replay.",
         lifespan=lifespan,

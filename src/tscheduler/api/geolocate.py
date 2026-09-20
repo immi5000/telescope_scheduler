@@ -55,7 +55,7 @@ ELEVATION_URL: Final = "https://api.open-meteo.com/v1/elevation"
 REVERSE_URL: Final = "https://nominatim.openstreetmap.org/reverse"
 
 #: Nominatim's policy requires a User-Agent that identifies the application.
-USER_AGENT: Final = "tscheduler/0.1 (telescope night scheduler)"
+USER_AGENT: Final = "tscheduler/0.1 (Traveling Telescope)"
 
 #: Short: this sits between pressing a button and a form filling in. A site
 #: that has to wait four seconds for a name it does not need is worse than a

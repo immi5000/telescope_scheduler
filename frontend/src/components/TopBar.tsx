@@ -33,7 +33,7 @@ export function TopBar({
           <path d="M15.5 3.5a8.5 8.5 0 1 0 5 15.2A7 7 0 0 1 15.5 3.5z" fill="currentColor" />
           <path d="M2 21h20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
-        <span className="topbar__title">Night Scheduler</span>
+        <span className="topbar__title">Traveling Telescope</span>
         {/*
           The session's own name, which the server builds from the LOCAL night
           ("Urbana, IL · night of 2026-09-17"). The grid's start is a UTC

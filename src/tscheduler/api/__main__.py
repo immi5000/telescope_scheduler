@@ -15,7 +15,7 @@ from tscheduler.config import load_settings
 
 def main() -> None:
     cfg = load_settings()
-    ap = argparse.ArgumentParser(description="Run the telescope scheduler API.")
+    ap = argparse.ArgumentParser(description="Run the Traveling Telescope API.")
     ap.add_argument("--host", default=cfg.host)
     ap.add_argument("--port", type=int, default=cfg.port)
     ap.add_argument("--reload", action="store_true", help="restart on source changes")

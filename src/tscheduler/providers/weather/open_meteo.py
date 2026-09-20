@@ -144,7 +144,7 @@ def default_client() -> httpx.Client:
     """Modest timeouts: a fold would rather degrade than hang on one request."""
     return httpx.Client(
         timeout=httpx.Timeout(12.0, connect=5.0),
-        headers={"User-Agent": "tscheduler (telescope night scheduler)"},
+        headers={"User-Agent": "tscheduler (Traveling Telescope)"},
     )
 
 

@@ -1,4 +1,4 @@
-# Telescope Night Scheduler
+# Traveling Telescope
 
 Given a site, equipment and a target list, produce a night plan that gives each
 target its best available time — and re-plan in real time as clouds move,

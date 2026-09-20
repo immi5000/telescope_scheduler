@@ -69,7 +69,7 @@ async function commonsThumb(title, width) {
     `${COMMONS_API}?action=query&format=json&prop=imageinfo` +
     `&iiprop=url|size|extmetadata&iiurlwidth=${width}&titles=${encodeURIComponent(title)}`
   const res = await fetch(url, {
-    headers: { 'user-agent': 'telescope-scheduler build-sky-data (local, one-off)' },
+    headers: { 'user-agent': 'traveling-telescope build-sky-data (local, one-off)' },
   })
   if (!res.ok) throw new Error(`Commons API: HTTP ${res.status}`)
   const pages = Object.values((await res.json()).query.pages)
@@ -125,7 +125,7 @@ const DEFAULT_BV = 0.65
 async function get(url, what) {
   process.stdout.write(`  fetching ${what} ... `)
   const res = await fetch(url, {
-    headers: { 'user-agent': 'telescope-scheduler build-sky-data (local, one-off)' },
+    headers: { 'user-agent': 'traveling-telescope build-sky-data (local, one-off)' },
   })
   if (!res.ok) throw new Error(`${what}: HTTP ${res.status} ${res.statusText}`)
   const buf = Buffer.from(await res.arrayBuffer())
